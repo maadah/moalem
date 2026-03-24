@@ -31,9 +31,9 @@ async function startServer() {
         INSTRUCTIONS:
         1. Analyze the provided images of the student's handwritten paper.
         2. Extract the student's name from the first page. If not found, use "Unknown Student".
-        3. For each question, identify the student's answer.
+        3. For each question (including sub-questions like 1a, 1b, etc.), identify the student's answer.
         4. Compare the student's answer with the model answer.
-        5. Assign a grade for each question based on accuracy. Be fair but strict as a teacher.
+        5. Assign a grade for each question/sub-question based on accuracy. Be fair but strict as a teacher.
         6. Provide brief feedback for each answer.
         7. Calculate the total grade.
         
@@ -44,7 +44,7 @@ async function startServer() {
               "studentName": "Name",
               "gradings": [
                 {
-                  "questionId": "id",
+                  "questionId": "id", // Use the original ID from the questions list, even for sub-questions
                   "studentAnswer": "extracted text",
                   "grade": number,
                   "feedback": "feedback text"
@@ -54,6 +54,8 @@ async function startServer() {
             }
           ]
         }
+        
+        IMPORTANT: If a question has sub-questions, grade each sub-question individually and include them in the "gradings" array using their respective IDs.
       `;
 
       const imageParts = imageUrls.map((base64: string) => ({

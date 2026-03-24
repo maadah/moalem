@@ -267,16 +267,60 @@ function ExamCreator({ user, onSave, onCancel }: any) {
       text: '',
       answer: '',
       grade: 0,
-      type: 'text'
+      type: 'text',
+      subQuestions: []
     }]);
   };
 
-  const updateQuestion = (id: string, updates: Partial<Question>) => {
-    setQuestions(questions.map(q => q.id === id ? { ...q, ...updates } : q));
+  const addSubQuestion = (parentId: string) => {
+    setQuestions(questions.map(q => {
+      if (q.id === parentId) {
+        const subQs = q.subQuestions || [];
+        return {
+          ...q,
+          subQuestions: [...subQs, {
+            id: Math.random().toString(36).substr(2, 9),
+            text: '',
+            answer: '',
+            grade: 0,
+            type: 'text'
+          }]
+        };
+      }
+      return q;
+    }));
   };
 
-  const removeQuestion = (id: string) => {
-    setQuestions(questions.filter(q => q.id !== id));
+  const updateQuestion = (id: string, updates: Partial<Question>, parentId?: string) => {
+    if (parentId) {
+      setQuestions(questions.map(q => {
+        if (q.id === parentId) {
+          return {
+            ...q,
+            subQuestions: q.subQuestions?.map(sq => sq.id === id ? { ...sq, ...updates } : sq)
+          };
+        }
+        return q;
+      }));
+    } else {
+      setQuestions(questions.map(q => q.id === id ? { ...q, ...updates } : q));
+    }
+  };
+
+  const removeQuestion = (id: string, parentId?: string) => {
+    if (parentId) {
+      setQuestions(questions.map(q => {
+        if (q.id === parentId) {
+          return {
+            ...q,
+            subQuestions: q.subQuestions?.filter(sq => sq.id !== id)
+          };
+        }
+        return q;
+      }));
+    } else {
+      setQuestions(questions.filter(q => q.id !== id));
+    }
   };
 
   const saveExam = async () => {
@@ -418,27 +462,77 @@ function ExamCreator({ user, onSave, onCancel }: any) {
                   type="text" 
                   value={q.text} 
                   onChange={(e) => updateQuestion(q.id, { text: e.target.value })}
-                  placeholder="نص السؤال..."
+                  placeholder="نص السؤال الرئيسي..."
                   className="w-full bg-white px-4 py-2 rounded-xl border border-stone-200 outline-none focus:ring-2 focus:ring-emerald-500"
                 />
-                {q.type === 'multiple-choice' && (
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-stone-400">الخيارات (افصل بينها بفاصلة)</label>
-                    <input 
-                      type="text" 
-                      value={q.options?.join(', ') || ''} 
-                      onChange={(e) => updateQuestion(q.id, { options: e.target.value.split(',').map(s => s.trim()) })}
-                      placeholder="خيار 1, خيار 2, خيار 3..."
-                      className="w-full bg-white px-4 py-2 rounded-xl border border-stone-200 outline-none"
+                
+                {/* Sub-questions Section */}
+                <div className="mr-8 space-y-3 border-r-2 border-emerald-100 pr-4">
+                  {q.subQuestions?.map((sq, sqIndex) => (
+                    <div key={sq.id} className="space-y-2 relative group/sub">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-bold text-emerald-600">({String.fromCharCode(97 + sqIndex)})</span>
+                        <input 
+                          type="text" 
+                          value={sq.text} 
+                          onChange={(e) => updateQuestion(sq.id, { text: e.target.value }, q.id)}
+                          placeholder="نص السؤال الفرعي..."
+                          className="flex-1 bg-white px-3 py-1.5 rounded-lg border border-stone-200 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                        />
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-stone-400">الدرجة:</span>
+                          <input 
+                            type="number" 
+                            value={sq.grade} 
+                            onChange={(e) => updateQuestion(sq.id, { grade: Number(e.target.value) }, q.id)}
+                            className="w-12 px-1 py-0.5 rounded-md border border-stone-200 text-xs text-center"
+                          />
+                        </div>
+                        <button 
+                          onClick={() => removeQuestion(sq.id, q.id)}
+                          className="p-1 text-stone-300 hover:text-red-500 opacity-0 group-hover/sub:opacity-100 transition-all"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                      <textarea 
+                        value={sq.answer} 
+                        onChange={(e) => updateQuestion(sq.id, { answer: e.target.value }, q.id)}
+                        placeholder="الإجابة النموذجية للفرع..."
+                        className="w-full bg-white px-3 py-1.5 rounded-lg border border-stone-100 text-xs outline-none focus:ring-2 focus:ring-emerald-500 h-12 resize-none"
+                      />
+                    </div>
+                  ))}
+                  <button 
+                    onClick={() => addSubQuestion(q.id)}
+                    className="text-[10px] text-emerald-600 font-bold hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" /> إضافة فرع (أ، ب، ج...)
+                  </button>
+                </div>
+
+                {(!q.subQuestions || q.subQuestions.length === 0) && (
+                  <>
+                    {q.type === 'multiple-choice' && (
+                      <div className="space-y-2">
+                        <label className="text-xs font-medium text-stone-400">الخيارات (افصل بينها بفاصلة)</label>
+                        <input 
+                          type="text" 
+                          value={q.options?.join(', ') || ''} 
+                          onChange={(e) => updateQuestion(q.id, { options: e.target.value.split(',').map(s => s.trim()) })}
+                          placeholder="خيار 1, خيار 2, خيار 3..."
+                          className="w-full bg-white px-4 py-2 rounded-xl border border-stone-200 outline-none"
+                        />
+                      </div>
+                    )}
+                    <textarea 
+                      value={q.answer} 
+                      onChange={(e) => updateQuestion(q.id, { answer: e.target.value })}
+                      placeholder="الإجابة النموذجية..."
+                      className="w-full bg-white px-4 py-2 rounded-xl border border-stone-200 outline-none focus:ring-2 focus:ring-emerald-500 h-20 resize-none"
                     />
-                  </div>
+                  </>
                 )}
-                <textarea 
-                  value={q.answer} 
-                  onChange={(e) => updateQuestion(q.id, { answer: e.target.value })}
-                  placeholder="الإجابة النموذجية..."
-                  className="w-full bg-white px-4 py-2 rounded-xl border border-stone-200 outline-none focus:ring-2 focus:ring-emerald-500 h-20 resize-none"
-                />
               </div>
             ))}
           </div>
@@ -584,7 +678,15 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
 
             <div className="space-y-4">
               {currentGrading.gradings.map((g: any, i: number) => {
-                const question = exam.questions.find((q: any) => q.id === g.questionId);
+                // Find question or sub-question
+                let question: any = null;
+                exam.questions.forEach((q: any) => {
+                  if (q.id === g.questionId) question = q;
+                  q.subQuestions?.forEach((sq: any) => {
+                    if (sq.id === g.questionId) question = sq;
+                  });
+                });
+
                 return (
                   <div key={i} className="p-6 bg-stone-50 rounded-2xl border border-stone-100 space-y-3">
                     <div className="flex items-center justify-between">
