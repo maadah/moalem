@@ -12,7 +12,7 @@ async function startServer() {
   // API Route for grading (Secure Backend)
   app.post("/api/grade", async (req, res) => {
     try {
-      const { imageUrls, questions, totalExamGrade } = req.body;
+      const { imageUrls, questions, totalExamGrade, requiredQuestionsCount } = req.body;
       const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
 
       if (!apiKey) {
@@ -27,6 +27,7 @@ async function startServer() {
         ${JSON.stringify(questions, null, 2)}
         
         TOTAL EXAM GRADE: ${totalExamGrade}
+        REQUIRED QUESTIONS COUNT: ${requiredQuestionsCount}
         
         INSTRUCTIONS:
         1. Analyze the provided images of the student's handwritten paper.
@@ -36,6 +37,13 @@ async function startServer() {
         5. Assign a grade for each question/sub-question based on accuracy. Be fair but strict as a teacher.
         6. Provide brief feedback for each answer.
         7. Calculate the total grade.
+        
+        CHOICE LOGIC (IMPORTANT):
+        - Some exams allow students to skip questions (e.g., "Answer 5 out of 6").
+        - If a student answers MORE than the required number of questions, you MUST ignore the LAST question(s) in the sequence. For example, if 5 are required and 6 are answered, ignore question 6.
+        - If a question has sub-questions and the student answers MORE than the "requiredSubCount", you MUST ignore the LAST sub-question(s) in that question.
+        - Mark ignored questions/sub-questions with a grade of 0 and state in the feedback: "تم تجاهل هذا السؤال/الفرع لأنه زائد عن العدد المطلوب (قاعدة ترك الأخير)".
+        - Calculate the "totalGrade" based only on the required number of questions/sub-questions (excluding the ignored ones).
         
         OUTPUT FORMAT (JSON ONLY):
         {

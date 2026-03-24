@@ -258,6 +258,7 @@ function Dashboard({ exams, onNewExam, onGrade, onDeleteExam }: any) {
 function ExamCreator({ user, onSave, onCancel }: any) {
   const [title, setTitle] = useState('');
   const [totalGrade, setTotalGrade] = useState(100);
+  const [requiredQuestionsCount, setRequiredQuestionsCount] = useState<number | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -330,6 +331,7 @@ function ExamCreator({ user, onSave, onCancel }: any) {
       await addDoc(collection(db, 'exams'), {
         title,
         totalGrade,
+        requiredQuestionsCount: requiredQuestionsCount || questions.length,
         questions,
         authorUid: user.uid,
         createdAt: serverTimestamp()
@@ -348,10 +350,17 @@ function ExamCreator({ user, onSave, onCancel }: any) {
     doc.setFont("helvetica");
     doc.text(title, 105, 20, { align: 'center' });
     doc.text(`Total Grade: ${totalGrade}`, 105, 30, { align: 'center' });
+    doc.text(`Required Questions: ${requiredQuestionsCount || questions.length}`, 105, 40, { align: 'center' });
     
-    let y = 50;
+    let y = 55;
     questions.forEach((q, i) => {
       doc.text(`${i + 1}. ${q.text} (${q.grade} marks)`, 20, y);
+      if (q.requiredSubCount && q.subQuestions && q.subQuestions.length > 0) {
+        y += 7;
+        doc.setFontSize(10);
+        doc.text(`   (Answer ${q.requiredSubCount} out of ${q.subQuestions.length} branches)`, 20, y);
+        doc.setFontSize(12);
+      }
       y += 10;
       if (q.type === 'multiple-choice' && q.options) {
         q.options.forEach(opt => {
@@ -393,15 +402,23 @@ function ExamCreator({ user, onSave, onCancel }: any) {
       </div>
 
       <div className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="space-y-2">
             <label className="text-sm font-medium text-stone-500">عنوان الامتحان</label>
-            <input 
-              type="text" 
+            <textarea 
               value={title} 
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                e.target.style.height = 'auto';
+                e.target.style.height = e.target.scrollHeight + 'px';
+              }}
+              onFocus={(e) => {
+                e.target.style.height = 'auto';
+                e.target.style.height = e.target.scrollHeight + 'px';
+              }}
               placeholder="مثال: امتحان اللغة العربية - الفصل الأول"
-              className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+              rows={1}
+              className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all overflow-hidden resize-none"
             />
           </div>
           <div className="space-y-2">
@@ -410,6 +427,16 @@ function ExamCreator({ user, onSave, onCancel }: any) {
               type="number" 
               value={totalGrade} 
               onChange={(e) => setTotalGrade(Number(e.target.value))}
+              className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-stone-500">عدد الأسئلة المطلوب الإجابة عليها</label>
+            <input 
+              type="number" 
+              value={requiredQuestionsCount || ''} 
+              onChange={(e) => setRequiredQuestionsCount(e.target.value ? Number(e.target.value) : null)}
+              placeholder={`الافتراضي: ${questions.length || 0}`}
               className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
             />
           </div>
@@ -458,26 +485,65 @@ function ExamCreator({ user, onSave, onCancel }: any) {
                     />
                   </div>
                 </div>
-                <input 
-                  type="text" 
+                <textarea 
                   value={q.text} 
-                  onChange={(e) => updateQuestion(q.id, { text: e.target.value })}
+                  onChange={(e) => {
+                    updateQuestion(q.id, { text: e.target.value });
+                    e.target.style.height = 'auto';
+                    e.target.style.height = e.target.scrollHeight + 'px';
+                  }}
+                  onFocus={(e) => {
+                    e.target.style.height = 'auto';
+                    e.target.style.height = e.target.scrollHeight + 'px';
+                  }}
                   placeholder="نص السؤال الرئيسي..."
-                  className="w-full bg-white px-4 py-2 rounded-xl border border-stone-200 outline-none focus:ring-2 focus:ring-emerald-500"
+                  rows={1}
+                  className="w-full bg-white px-4 py-2 rounded-xl border border-stone-200 outline-none focus:ring-2 focus:ring-emerald-500 overflow-hidden resize-none"
                 />
                 
                 {/* Sub-questions Section */}
                 <div className="mr-8 space-y-3 border-r-2 border-emerald-100 pr-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-bold text-stone-400">الفروع والترك:</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-stone-400">عدد الفروع المطلوب حلها:</span>
+                      <input 
+                        type="number" 
+                        value={q.requiredSubCount || ''} 
+                        onChange={(e) => updateQuestion(q.id, { requiredSubCount: e.target.value ? Number(e.target.value) : undefined })}
+                        placeholder={q.subQuestions?.length.toString()}
+                        className="w-10 px-1 py-0.5 rounded border border-stone-200 text-[10px] text-center"
+                      />
+                    </div>
+                  </div>
                   {q.subQuestions?.map((sq, sqIndex) => (
-                    <div key={sq.id} className="space-y-2 relative group/sub">
+                    <div key={sq.id} className="p-4 bg-white rounded-xl border border-stone-100 space-y-3 relative group/sub shadow-sm">
                       <div className="flex items-center gap-3">
                         <span className="text-xs font-bold text-emerald-600">({String.fromCharCode(97 + sqIndex)})</span>
-                        <input 
-                          type="text" 
+                        <select 
+                          value={sq.type} 
+                          onChange={(e) => updateQuestion(sq.id, { type: e.target.value as any }, q.id)}
+                          className="bg-stone-50 px-2 py-1 rounded border border-stone-200 text-[10px] outline-none"
+                        >
+                          <option value="text">نصي</option>
+                          <option value="true-false">صح / خطأ</option>
+                          <option value="multiple-choice">اختيارات</option>
+                          <option value="fill-in-the-blanks">فراغات</option>
+                        </select>
+                        <textarea 
                           value={sq.text} 
-                          onChange={(e) => updateQuestion(sq.id, { text: e.target.value }, q.id)}
+                          onChange={(e) => {
+                            updateQuestion(sq.id, { text: e.target.value }, q.id);
+                            e.target.style.height = 'auto';
+                            e.target.style.height = e.target.scrollHeight + 'px';
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.height = 'auto';
+                            e.target.style.height = e.target.scrollHeight + 'px';
+                          }}
                           placeholder="نص السؤال الفرعي..."
-                          className="flex-1 bg-white px-3 py-1.5 rounded-lg border border-stone-200 text-sm outline-none focus:ring-2 focus:ring-emerald-500"
+                          rows={1}
+                          className="flex-1 bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-200 text-sm outline-none focus:ring-2 focus:ring-emerald-500 overflow-hidden resize-none"
                         />
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] text-stone-400">الدرجة:</span>
@@ -495,11 +561,42 @@ function ExamCreator({ user, onSave, onCancel }: any) {
                           <Trash2 className="w-3 h-3" />
                         </button>
                       </div>
+
+                      {sq.type === 'multiple-choice' && (
+                        <div className="mr-8 space-y-1">
+                          <label className="text-[10px] font-medium text-stone-400">الخيارات (افصل بينها بفاصلة)</label>
+                          <textarea 
+                            value={sq.options?.join(', ') || ''} 
+                            onChange={(e) => {
+                              updateQuestion(sq.id, { options: e.target.value.split(',').map(s => s.trim()) }, q.id);
+                              e.target.style.height = 'auto';
+                              e.target.style.height = e.target.scrollHeight + 'px';
+                            }}
+                            onFocus={(e) => {
+                              e.target.style.height = 'auto';
+                              e.target.style.height = e.target.scrollHeight + 'px';
+                            }}
+                            placeholder="خيار 1, خيار 2..."
+                            rows={1}
+                            className="w-full bg-stone-50 px-3 py-1 rounded-lg border border-stone-200 text-[10px] outline-none overflow-hidden resize-none"
+                          />
+                        </div>
+                      )}
+
                       <textarea 
                         value={sq.answer} 
-                        onChange={(e) => updateQuestion(sq.id, { answer: e.target.value }, q.id)}
+                        onChange={(e) => {
+                          updateQuestion(sq.id, { answer: e.target.value }, q.id);
+                          e.target.style.height = 'auto';
+                          e.target.style.height = e.target.scrollHeight + 'px';
+                        }}
+                        onFocus={(e) => {
+                          e.target.style.height = 'auto';
+                          e.target.style.height = e.target.scrollHeight + 'px';
+                        }}
                         placeholder="الإجابة النموذجية للفرع..."
-                        className="w-full bg-white px-3 py-1.5 rounded-lg border border-stone-100 text-xs outline-none focus:ring-2 focus:ring-emerald-500 h-12 resize-none"
+                        rows={1}
+                        className="w-full bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-100 text-xs outline-none focus:ring-2 focus:ring-emerald-500 overflow-hidden resize-none min-h-[40px]"
                       />
                     </div>
                   ))}
@@ -516,20 +613,37 @@ function ExamCreator({ user, onSave, onCancel }: any) {
                     {q.type === 'multiple-choice' && (
                       <div className="space-y-2">
                         <label className="text-xs font-medium text-stone-400">الخيارات (افصل بينها بفاصلة)</label>
-                        <input 
-                          type="text" 
+                        <textarea 
                           value={q.options?.join(', ') || ''} 
-                          onChange={(e) => updateQuestion(q.id, { options: e.target.value.split(',').map(s => s.trim()) })}
+                          onChange={(e) => {
+                            updateQuestion(q.id, { options: e.target.value.split(',').map(s => s.trim()) });
+                            e.target.style.height = 'auto';
+                            e.target.style.height = e.target.scrollHeight + 'px';
+                          }}
+                          onFocus={(e) => {
+                            e.target.style.height = 'auto';
+                            e.target.style.height = e.target.scrollHeight + 'px';
+                          }}
                           placeholder="خيار 1, خيار 2, خيار 3..."
-                          className="w-full bg-white px-4 py-2 rounded-xl border border-stone-200 outline-none"
+                          rows={1}
+                          className="w-full bg-white px-4 py-2 rounded-xl border border-stone-200 outline-none overflow-hidden resize-none"
                         />
                       </div>
                     )}
                     <textarea 
                       value={q.answer} 
-                      onChange={(e) => updateQuestion(q.id, { answer: e.target.value })}
+                      onChange={(e) => {
+                        updateQuestion(q.id, { answer: e.target.value });
+                        e.target.style.height = 'auto';
+                        e.target.style.height = e.target.scrollHeight + 'px';
+                      }}
+                      onFocus={(e) => {
+                        e.target.style.height = 'auto';
+                        e.target.style.height = e.target.scrollHeight + 'px';
+                      }}
                       placeholder="الإجابة النموذجية..."
-                      className="w-full bg-white px-4 py-2 rounded-xl border border-stone-200 outline-none focus:ring-2 focus:ring-emerald-500 h-20 resize-none"
+                      rows={1}
+                      className="w-full bg-white px-4 py-2 rounded-xl border border-stone-200 outline-none focus:ring-2 focus:ring-emerald-500 overflow-hidden resize-none min-h-[80px]"
                     />
                   </>
                 )}
@@ -563,7 +677,7 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
     if (images.length === 0) return alert('يرجى رفع صور أوراق الطلاب');
     setIsGrading(true);
     try {
-      const { results } = await gradeStudentPaper(previews, exam.questions, exam.totalGrade);
+      const { results } = await gradeStudentPaper(previews, exam.questions, exam.totalGrade, exam.requiredQuestionsCount);
       setGradingResults(results);
       setCurrentResultIndex(0);
     } catch (e) {

@@ -8,6 +8,7 @@ export interface Question {
   type: 'text' | 'true-false' | 'multiple-choice' | 'fill-in-the-blanks';
   options?: string[];
   subQuestions?: Question[];
+  requiredSubCount?: number;
 }
 
 export interface GradingResult {
@@ -43,7 +44,8 @@ const getApiKey = () => {
 export async function gradeStudentPaper(
   imageUrls: string[],
   questions: Question[],
-  totalExamGrade: number
+  totalExamGrade: number,
+  requiredQuestionsCount: number
 ): Promise<{ results: { studentName: string; gradings: GradingResult[]; totalGrade: number }[] }> {
   // Convert image URLs (blobs) to base64 strings
   const base64Images = await Promise.all(
@@ -63,7 +65,7 @@ export async function gradeStudentPaper(
     const response = await fetch('/api/grade', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageUrls: base64Images, questions, totalExamGrade }),
+      body: JSON.stringify({ imageUrls: base64Images, questions, totalExamGrade, requiredQuestionsCount }),
     });
 
     if (response.ok) {
@@ -94,6 +96,7 @@ export async function gradeStudentPaper(
     ${JSON.stringify(questions, null, 2)}
     
     TOTAL EXAM GRADE: ${totalExamGrade}
+    REQUIRED QUESTIONS COUNT: ${requiredQuestionsCount}
     
     INSTRUCTIONS:
     1. Analyze the provided images of the student's handwritten paper.
@@ -103,6 +106,13 @@ export async function gradeStudentPaper(
     5. Assign a grade for each question/sub-question based on accuracy. Be fair but strict as a teacher.
     6. Provide brief feedback for each answer.
     7. Calculate the total grade.
+    
+    CHOICE LOGIC (IMPORTANT):
+    - Some exams allow students to skip questions (e.g., "Answer 5 out of 6").
+    - If a student answers MORE than the required number of questions, you MUST ignore the LAST question(s) in the sequence. For example, if 5 are required and 6 are answered, ignore question 6.
+    - If a question has sub-questions and the student answers MORE than the "requiredSubCount", you MUST ignore the LAST sub-question(s) in that question.
+    - Mark ignored questions/sub-questions with a grade of 0 and state in the feedback: "تم تجاهل هذا السؤال/الفرع لأنه زائد عن العدد المطلوب (قاعدة ترك الأخير)".
+    - Calculate the "totalGrade" based only on the required number of questions/sub-questions (excluding the ignored ones).
     
     OUTPUT FORMAT (JSON ONLY):
     {
