@@ -1,0 +1,76 @@
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: exams
+// Document ID: auto-generated
+// Fields:
+//   - title: string (required)
+//   - totalGrade: number (required)
+//   - questions: array of objects (required)
+//   - createdAt: timestamp (required)
+//   - authorUid: string (required)
+//
+// Collection: results
+// Document ID: auto-generated
+// Fields:
+//   - examId: string (required)
+//   - studentName: string (required)
+//   - totalGrade: number (required)
+//   - gradings: array of objects (required)
+//   - createdAt: timestamp (required)
+//   - authorUid: string (required)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(authorUid) {
+      return isAuthenticated() && request.auth.uid == authorUid;
+    }
+
+    function isValidExam(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() < 200 &&
+             data.totalGrade is number && data.totalGrade > 0 &&
+             data.questions is list &&
+             data.authorUid == request.auth.uid;
+    }
+
+    function isValidResult(data) {
+      return data.examId is string &&
+             data.studentName is string && data.studentName.size() > 0 &&
+             data.totalGrade is number &&
+             data.gradings is list &&
+             data.authorUid == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /exams/{examId} {
+      allow read: if isOwner(resource.data.authorUid);
+      allow create: if isAuthenticated() && isValidExam(request.resource.data);
+      allow update: if isOwner(resource.data.authorUid) && isValidExam(request.resource.data);
+      allow delete: if isOwner(resource.data.authorUid);
+    }
+
+    match /results/{resultId} {
+      allow read: if isOwner(resource.data.authorUid);
+      allow create: if isAuthenticated() && isValidResult(request.resource.data);
+      allow update: if isOwner(resource.data.authorUid) && isValidResult(request.resource.data);
+      allow delete: if isOwner(resource.data.authorUid);
+    }
+  }
+}

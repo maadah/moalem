@@ -1,0 +1,66 @@
+{
+  "entities": {
+    "Exam": {
+      "title": "Exam",
+      "description": "Represents an exam created by a teacher.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "The title of the exam." },
+        "totalGrade": { "type": "number", "description": "The total grade for the exam (e.g., 100)." },
+        "questions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "text": { "type": "string" },
+              "answer": { "type": "string" },
+              "grade": { "type": "number" },
+              "type": { "type": "string", "enum": ["text", "true-false", "multiple-choice", "fill-in-the-blanks"] },
+              "options": { "type": "array", "items": { "type": "string" } },
+              "subQuestions": { "type": "array", "items": { "$ref": "Question" } }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "authorUid": { "type": "string" }
+      },
+      "required": ["title", "totalGrade", "questions", "authorUid"]
+    },
+    "StudentResult": {
+      "title": "StudentResult",
+      "description": "Represents the grading results for a student's exam.",
+      "type": "object",
+      "properties": {
+        "examId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "totalGrade": { "type": "number" },
+        "gradings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "questionId": { "type": "string" },
+              "studentAnswer": { "type": "string" },
+              "grade": { "type": "number" },
+              "feedback": { "type": "string" }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "authorUid": { "type": "string" }
+      },
+      "required": ["examId", "studentName", "totalGrade", "gradings", "authorUid"]
+    }
+  },
+  "firestore": {
+    "/exams/{examId}": {
+      "schema": "Exam",
+      "description": "Collection of exams created by teachers."
+    },
+    "/results/{resultId}": {
+      "schema": "StudentResult",
+      "description": "Collection of graded student results."
+    }
+  }
+}
