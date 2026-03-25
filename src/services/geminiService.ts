@@ -103,7 +103,9 @@ export async function gradeStudentPaper(
     1. Analyze the provided images of the student's handwritten paper.
     2. Extract the student's name from the first page. If not found, use "Unknown Student".
     3. For each question (including sub-questions like 1a, 1b or 1-1, 1-2, etc.), identify the student's answer.
+    - The questions are hierarchical: Level 1 (Main Question), Level 2 (Branch/Point), Level 3 (Point inside Branch).
     - Sub-questions might be lettered (a, b, c) or numbered (1, 2, 3) depending on the "subStyle" property.
+    - Identify answers at the lowest level of the hierarchy (leaf nodes).
     4. Compare the student's answer with the model answer.
     5. Assign a grade for each question/sub-question based on accuracy. Be fair but strict as a teacher.
     6. Provide brief feedback for each answer.

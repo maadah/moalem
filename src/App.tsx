@@ -273,9 +273,32 @@ function ExamCreator({ user, onSave, onCancel }: any) {
     }]);
   };
 
-  const addSubQuestion = (parentId: string) => {
+  const addSubQuestion = (parentId: string, subParentId?: string) => {
     setQuestions(questions.map(q => {
       if (q.id === parentId) {
+        if (subParentId) {
+          // Level 3: Adding a point to a branch
+          return {
+            ...q,
+            subQuestions: q.subQuestions?.map(sq => {
+              if (sq.id === subParentId) {
+                return {
+                  ...sq,
+                  subStyle: 'numbers',
+                  subQuestions: [...(sq.subQuestions || []), {
+                    id: Math.random().toString(36).substr(2, 9),
+                    text: '',
+                    answer: '',
+                    grade: 0,
+                    type: 'text'
+                  }]
+                };
+              }
+              return sq;
+            })
+          };
+        }
+        // Level 2: Adding a branch or point to a main question
         const subQs = q.subQuestions || [];
         return {
           ...q,
@@ -285,7 +308,8 @@ function ExamCreator({ user, onSave, onCancel }: any) {
             text: '',
             answer: '',
             grade: 0,
-            type: 'text'
+            type: 'text',
+            subQuestions: []
           }]
         };
       }
@@ -293,8 +317,28 @@ function ExamCreator({ user, onSave, onCancel }: any) {
     }));
   };
 
-  const updateQuestion = (id: string, updates: Partial<Question>, parentId?: string) => {
-    if (parentId) {
+  const updateQuestion = (id: string, updates: Partial<Question>, parentId?: string, subParentId?: string) => {
+    if (subParentId && parentId) {
+      // Level 3 update
+      setQuestions(questions.map(q => {
+        if (q.id === parentId) {
+          return {
+            ...q,
+            subQuestions: q.subQuestions?.map(sq => {
+              if (sq.id === subParentId) {
+                return {
+                  ...sq,
+                  subQuestions: sq.subQuestions?.map(ssq => ssq.id === id ? { ...ssq, ...updates } : ssq)
+                };
+              }
+              return sq;
+            })
+          };
+        }
+        return q;
+      }));
+    } else if (parentId) {
+      // Level 2 update
       setQuestions(questions.map(q => {
         if (q.id === parentId) {
           return {
@@ -305,12 +349,33 @@ function ExamCreator({ user, onSave, onCancel }: any) {
         return q;
       }));
     } else {
+      // Level 1 update
       setQuestions(questions.map(q => q.id === id ? { ...q, ...updates } : q));
     }
   };
 
-  const removeQuestion = (id: string, parentId?: string) => {
-    if (parentId) {
+  const removeQuestion = (id: string, parentId?: string, subParentId?: string) => {
+    if (subParentId && parentId) {
+      // Level 3 remove
+      setQuestions(questions.map(q => {
+        if (q.id === parentId) {
+          return {
+            ...q,
+            subQuestions: q.subQuestions?.map(sq => {
+              if (sq.id === subParentId) {
+                return {
+                  ...sq,
+                  subQuestions: sq.subQuestions?.filter(ssq => ssq.id !== id)
+                };
+              }
+              return sq;
+            })
+          };
+        }
+        return q;
+      }));
+    } else if (parentId) {
+      // Level 2 remove
       setQuestions(questions.map(q => {
         if (q.id === parentId) {
           return {
@@ -321,6 +386,7 @@ function ExamCreator({ user, onSave, onCancel }: any) {
         return q;
       }));
     } else {
+      // Level 1 remove
       setQuestions(questions.filter(q => q.id !== id));
     }
   };
@@ -588,6 +654,52 @@ function ExamCreator({ user, onSave, onCancel }: any) {
                           className="p-1 text-stone-300 hover:text-red-500 opacity-0 group-hover/sub:opacity-100 transition-all"
                         >
                           <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+
+                      {/* Level 3: Points inside a Branch */}
+                      <div className="mr-6 space-y-2 border-r border-stone-200 pr-3">
+                        {sq.subQuestions?.map((ssq, ssqIndex) => (
+                          <div key={ssq.id} className="flex items-center gap-2 bg-stone-50/50 p-2 rounded-lg border border-stone-100">
+                            <span className="text-[10px] font-bold text-emerald-500">{ssqIndex + 1}-</span>
+                            <textarea 
+                              value={ssq.text} 
+                              onChange={(e) => {
+                                updateQuestion(ssq.id, { text: e.target.value }, q.id, sq.id);
+                                e.target.style.height = 'auto';
+                                e.target.style.height = e.target.scrollHeight + 'px';
+                              }}
+                              placeholder="نص النقطة..."
+                              rows={1}
+                              className="flex-1 bg-transparent text-[11px] outline-none resize-none overflow-hidden"
+                            />
+                            <input 
+                              type="text" 
+                              value={ssq.answer} 
+                              onChange={(e) => updateQuestion(ssq.id, { answer: e.target.value }, q.id, sq.id)}
+                              placeholder="الجواب"
+                              className="w-20 bg-white px-2 py-0.5 rounded border border-stone-200 text-[10px] outline-none"
+                            />
+                            <input 
+                              type="number" 
+                              value={ssq.grade || ''} 
+                              onChange={(e) => updateQuestion(ssq.id, { grade: Number(e.target.value) }, q.id, sq.id)}
+                              placeholder="درجة"
+                              className="w-10 px-1 py-0.5 rounded border border-stone-200 text-[10px] text-center"
+                            />
+                            <button 
+                              onClick={() => removeQuestion(ssq.id, q.id, sq.id)}
+                              className="text-stone-300 hover:text-red-500"
+                            >
+                              <Trash2 className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        ))}
+                        <button 
+                          onClick={() => addSubQuestion(q.id, sq.id)}
+                          className="text-[9px] text-emerald-500 hover:underline flex items-center gap-1"
+                        >
+                          <Plus className="w-2.5 h-2.5" /> إضافة نقاط لهذا الفرع (1، 2، 3...)
                         </button>
                       </div>
 
