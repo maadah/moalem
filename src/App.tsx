@@ -279,6 +279,7 @@ function ExamCreator({ user, onSave, onCancel }: any) {
         const subQs = q.subQuestions || [];
         return {
           ...q,
+          subStyle: q.subStyle || 'numbers',
           subQuestions: [...subQs, {
             id: Math.random().toString(36).substr(2, 9),
             text: '',
@@ -504,9 +505,35 @@ function ExamCreator({ user, onSave, onCancel }: any) {
                 {/* Sub-questions Section */}
                 <div className="mr-8 space-y-3 border-r-2 border-emerald-100 pr-4">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-bold text-stone-400">الفروع والترك:</span>
+                    <div className="flex items-center gap-4">
+                      <span className="text-[10px] font-bold text-stone-400">
+                        {q.subStyle === 'letters' ? 'الفروع والترك:' : 'النقاط/الفراغات والترك:'}
+                      </span>
+                      <div className="flex items-center bg-stone-100 rounded-lg p-0.5">
+                        <button 
+                          onClick={() => updateQuestion(q.id, { subStyle: 'numbers' })}
+                          className={cn(
+                            "px-2 py-0.5 text-[8px] rounded-md transition-all",
+                            (q.subStyle === 'numbers' || !q.subStyle) ? "bg-white text-emerald-600 shadow-sm" : "text-stone-400"
+                          )}
+                        >
+                          1, 2, 3
+                        </button>
+                        <button 
+                          onClick={() => updateQuestion(q.id, { subStyle: 'letters' })}
+                          className={cn(
+                            "px-2 py-0.5 text-[8px] rounded-md transition-all",
+                            q.subStyle === 'letters' ? "bg-white text-emerald-600 shadow-sm" : "text-stone-400"
+                          )}
+                        >
+                          أ, ب, ج
+                        </button>
+                      </div>
+                    </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-stone-400">عدد الفروع المطلوب حلها:</span>
+                      <span className="text-[10px] text-stone-400">
+                        {q.subStyle === 'letters' ? 'عدد الفروع المطلوب حلها:' : 'عدد النقاط المطلوب حلها:'}
+                      </span>
                       <input 
                         type="number" 
                         value={q.requiredSubCount || ''} 
@@ -519,7 +546,9 @@ function ExamCreator({ user, onSave, onCancel }: any) {
                   {q.subQuestions?.map((sq, sqIndex) => (
                     <div key={sq.id} className="p-4 bg-white rounded-xl border border-stone-100 space-y-3 relative group/sub shadow-sm">
                       <div className="flex items-center gap-3">
-                        <span className="text-xs font-bold text-emerald-600">({String.fromCharCode(97 + sqIndex)})</span>
+                        <span className="text-xs font-bold text-emerald-600">
+                          {q.subStyle === 'letters' ? `(${String.fromCharCode(97 + sqIndex)})` : `${sqIndex + 1}-`}
+                        </span>
                         <select 
                           value={sq.type} 
                           onChange={(e) => updateQuestion(sq.id, { type: e.target.value as any }, q.id)}
@@ -604,7 +633,8 @@ function ExamCreator({ user, onSave, onCancel }: any) {
                     onClick={() => addSubQuestion(q.id)}
                     className="text-[10px] text-emerald-600 font-bold hover:underline flex items-center gap-1"
                   >
-                    <Plus className="w-3 h-3" /> إضافة فرع (أ، ب، ج...)
+                    <Plus className="w-3 h-3" /> 
+                    {q.subStyle === 'letters' ? 'إضافة فرع (أ، ب، ج...)' : 'إضافة نقطة/فراغ (1، 2، 3...)'}
                   </button>
                 </div>
 
