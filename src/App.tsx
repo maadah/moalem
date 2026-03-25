@@ -273,7 +273,7 @@ function ExamCreator({ user, onSave, onCancel }: any) {
     }]);
   };
 
-  const addSubQuestion = (parentId: string, subParentId?: string) => {
+  const addSubQuestion = (parentId: string, subParentId?: string, style?: 'numbers' | 'letters') => {
     setQuestions(questions.map(q => {
       if (q.id === parentId) {
         if (subParentId) {
@@ -284,7 +284,7 @@ function ExamCreator({ user, onSave, onCancel }: any) {
               if (sq.id === subParentId) {
                 return {
                   ...sq,
-                  subStyle: 'numbers',
+                  subStyle: style || 'numbers',
                   subQuestions: [...(sq.subQuestions || []), {
                     id: Math.random().toString(36).substr(2, 9),
                     text: '',
@@ -302,7 +302,7 @@ function ExamCreator({ user, onSave, onCancel }: any) {
         const subQs = q.subQuestions || [];
         return {
           ...q,
-          subStyle: q.subStyle || 'numbers',
+          subStyle: style || q.subStyle || 'numbers',
           subQuestions: [...subQs, {
             id: Math.random().toString(36).substr(2, 9),
             text: '',
@@ -696,7 +696,7 @@ function ExamCreator({ user, onSave, onCancel }: any) {
                           </div>
                         ))}
                         <button 
-                          onClick={() => addSubQuestion(q.id, sq.id)}
+                          onClick={() => addSubQuestion(q.id, sq.id, 'numbers')}
                           className="text-[9px] text-emerald-500 hover:underline flex items-center gap-1"
                         >
                           <Plus className="w-2.5 h-2.5" /> إضافة نقاط لهذا الفرع (1، 2، 3...)
@@ -741,13 +741,20 @@ function ExamCreator({ user, onSave, onCancel }: any) {
                       />
                     </div>
                   ))}
-                  <button 
-                    onClick={() => addSubQuestion(q.id)}
-                    className="text-[10px] text-emerald-600 font-bold hover:underline flex items-center gap-1"
-                  >
-                    <Plus className="w-3 h-3" /> 
-                    {q.subStyle === 'letters' ? 'إضافة فرع (أ، ب، ج...)' : 'إضافة نقطة/فراغ (1، 2، 3...)'}
-                  </button>
+                  <div className="flex items-center gap-4 pt-2">
+                    <button 
+                      onClick={() => addSubQuestion(q.id, undefined, 'letters')}
+                      className="text-[10px] text-emerald-600 font-bold hover:underline flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-lg"
+                    >
+                      <Plus className="w-3 h-3" /> إضافة فرع (أ، ب، ج...)
+                    </button>
+                    <button 
+                      onClick={() => addSubQuestion(q.id, undefined, 'numbers')}
+                      className="text-[10px] text-emerald-600 font-bold hover:underline flex items-center gap-1 bg-stone-50 px-3 py-1.5 rounded-lg"
+                    >
+                      <Plus className="w-3 h-3" /> إضافة نقطة (1، 2، 3...)
+                    </button>
+                  </div>
                 </div>
 
                 {(!q.subQuestions || q.subQuestions.length === 0) && (
