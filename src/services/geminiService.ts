@@ -65,10 +65,14 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     - For multiple-choice, extract the "options".
     - Try to extract a logical "title" for the exam from the header.
     - Generate a unique ID for each question/sub-question.
+    - **CRITICAL**: Detect choice logic (e.g., "Answer 2 out of 3" or "أجب عن اثنين مما يلي").
+      - For main questions, set "requiredQuestionsCount".
+      - For sub-questions/branches/points, set "requiredSubCount".
     
     OUTPUT FORMAT (JSON ONLY):
     {
       "title": "Exam Title",
+      "requiredQuestionsCount": number (optional),
       "questions": [
         {
           "id": "unique_id",
@@ -78,6 +82,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
           "type": "text|true-false|multiple-choice|fill-in-the-blanks",
           "options": ["opt1", "opt2"],
           "subStyle": "letters|numbers",
+          "requiredSubCount": number (optional),
           "subQuestions": [ ... nested sub-questions ... ]
         }
       ]

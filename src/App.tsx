@@ -398,6 +398,7 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
       const result = await extractExamFromImages(extractionImages, apiKey);
       if (result.title) setTitle(result.title);
       if (result.questions) setQuestions(result.questions);
+      if (result.requiredQuestionsCount) setRequiredQuestionsCount(result.requiredQuestionsCount);
       setExtractionImages([]);
       alert('تم استخراج الأسئلة بنجاح');
     } catch (e) {
