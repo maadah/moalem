@@ -44,7 +44,7 @@ const getApiKey = () => {
   return localStorage.getItem('GEMINI_API_KEY_AUTO') || '';
 };
 
-export async function extractExamFromImages(base64Images: string[], apiKey: string): Promise<{ title: string, questions: Question[] }> {
+export async function extractExamFromImages(base64Images: string[], apiKey: string): Promise<{ title: string, questions: Question[], requiredQuestionsCount?: number }> {
   const ai = new GoogleGenAI({ apiKey });
   const prompt = `
     Analyze the provided images of an exam paper and extract the questions and answers into a structured JSON format.

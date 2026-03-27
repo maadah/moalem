@@ -33,6 +33,7 @@
       "type": "object",
       "properties": {
         "examId": { "type": "string" },
+        "sessionId": { "type": "string", "description": "The ID of the grading session this result belongs to." },
         "studentName": { "type": "string" },
         "totalGrade": { "type": "number" },
         "gradings": {
@@ -51,6 +52,19 @@
         "authorUid": { "type": "string" }
       },
       "required": ["examId", "studentName", "totalGrade", "gradings", "authorUid"]
+    },
+    "GradingSession": {
+      "title": "GradingSession",
+      "description": "Represents a batch of graded student results.",
+      "type": "object",
+      "properties": {
+        "examId": { "type": "string" },
+        "examTitle": { "type": "string" },
+        "studentCount": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "authorUid": { "type": "string" }
+      },
+      "required": ["examId", "examTitle", "studentCount", "authorUid"]
     }
   },
   "firestore": {
@@ -61,6 +75,10 @@
     "/results/{resultId}": {
       "schema": "StudentResult",
       "description": "Collection of graded student results."
+    },
+    "/sessions/{sessionId}": {
+      "schema": "GradingSession",
+      "description": "Collection of grading sessions (batches)."
     }
   }
 }

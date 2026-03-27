@@ -3,7 +3,8 @@ import {
   Plus, Trash2, Save, FileText, Upload, CheckCircle, 
   XCircle, ChevronDown, ChevronUp, Download, LogIn, 
   LogOut, Loader2, FileUp, List, Settings, User,
-  HelpCircle, CheckSquare, Type, LayoutGrid, Image as ImageIcon
+  HelpCircle, CheckSquare, Type, LayoutGrid, Image as ImageIcon,
+  ArrowRight, Calendar, Folder, FolderOpen, Users
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -34,6 +35,7 @@ export default function App() {
   const [selectedExam, setSelectedExam] = useState<any>(null);
   const [editingExam, setEditingExam] = useState<any>(null);
   const [results, setResults] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<any[]>([]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
@@ -57,6 +59,15 @@ export default function App() {
     const q = query(collection(db, 'results'), where('authorUid', '==', user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setResults(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsubscribe();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db, 'sessions'), where('authorUid', '==', user.uid));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setSessions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
     return () => unsubscribe();
   }, [user]);
@@ -173,6 +184,7 @@ export default function App() {
           {view === 'results' && (
             <ResultsView 
               results={results} 
+              sessions={sessions}
               exams={exams}
               onBack={() => setView('dashboard')}
             />
@@ -1121,9 +1133,20 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
 
   const saveAllResults = async () => {
     try {
+      // 1. Create a session document
+      const sessionRef = await addDoc(collection(db, 'sessions'), {
+        examId: exam.id,
+        examTitle: exam.title,
+        authorUid: user.uid,
+        studentCount: gradingResults.length,
+        createdAt: serverTimestamp()
+      });
+
+      // 2. Save each result with the sessionId
       for (const result of gradingResults) {
         await addDoc(collection(db, 'results'), {
           ...result,
+          sessionId: sessionRef.id,
           examId: exam.id,
           examTitle: exam.title,
           authorUid: user.uid,
@@ -1304,7 +1327,12 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
   );
 }
 
-function ResultsView({ results, exams, onBack }: any) {
+function ResultsView({ results, sessions, exams, onBack }: any) {
+  const [selectedResult, setSelectedResult] = useState<any>(null);
+  const [selectedSession, setSelectedSession] = useState<any>(null);
+  const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
+  const [selectedMonth, setSelectedMonth] = useState<number | 'all'>('all');
+
   const exportPDF = (result: any) => {
     const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
     doc.setFont("helvetica");
@@ -1328,6 +1356,172 @@ function ResultsView({ results, exams, onBack }: any) {
     doc.save(`${result.studentName}_result.pdf`);
   };
 
+  const years = Array.from(new Set(sessions.map((s: any) => s.createdAt?.toDate().getFullYear()))).sort((a: any, b: any) => b - a);
+  const months = [
+    { id: 1, name: 'يناير' }, { id: 2, name: 'فبراير' }, { id: 3, name: 'مارس' },
+    { id: 4, name: 'أبريل' }, { id: 5, name: 'مايو' }, { id: 6, name: 'يونيو' },
+    { id: 7, name: 'يوليو' }, { id: 8, name: 'أغسطس' }, { id: 9, name: 'سبتمبر' },
+    { id: 10, name: 'أكتوبر' }, { id: 11, name: 'نوفمبر' }, { id: 12, name: 'ديسمبر' }
+  ];
+
+  const filteredSessions = sessions.filter((s: any) => {
+    const date = s.createdAt?.toDate();
+    if (!date) return true;
+    const yearMatch = selectedYear === 'all' || date.getFullYear() === selectedYear;
+    const monthMatch = selectedMonth === 'all' || (date.getMonth() + 1) === selectedMonth;
+    return yearMatch && monthMatch;
+  }).sort((a: any, b: any) => b.createdAt?.toDate() - a.createdAt?.toDate());
+
+  const sessionResults = results.filter((r: any) => r.sessionId === selectedSession?.id);
+
+  if (selectedResult) {
+    const exam = exams.find((e: any) => e.id === selectedResult.examId);
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="space-y-8"
+      >
+        <div className="flex items-center justify-between">
+          <button onClick={() => setSelectedResult(null)} className="flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors">
+            <ArrowRight className="w-5 h-5" />
+            العودة لقائمة الطلاب
+          </button>
+          <button 
+            onClick={() => exportPDF(selectedResult)}
+            className="bg-emerald-600 text-white px-6 py-2 rounded-xl flex items-center gap-2 hover:bg-emerald-700 transition-colors"
+          >
+            <Download className="w-4 h-4" />
+            تحميل PDF
+          </button>
+        </div>
+
+        <div className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-8">
+          <div className="flex items-center justify-between border-b border-stone-100 pb-6">
+            <div>
+              <h3 className="text-2xl font-bold">الطالب: {selectedResult.studentName}</h3>
+              <p className="text-stone-500 mt-1">امتحان: {selectedResult.examTitle}</p>
+              <p className="text-stone-400 text-sm mt-1">التاريخ: {selectedResult.createdAt?.toDate().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            </div>
+            <div className="text-right">
+              <span className="text-stone-400 text-sm">الدرجة النهائية</span>
+              <div className="text-5xl font-bold text-emerald-600">
+                {selectedResult.totalGrade}
+                <span className="text-xl text-stone-300"> / {exam?.totalGrade || '?'}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            {selectedResult.gradings.map((g: any, i: number) => {
+              let question: any = null;
+              if (exam) {
+                exam.questions.forEach((q: any) => {
+                  if (q.id === g.questionId) question = q;
+                  q.subQuestions?.forEach((sq: any) => {
+                    if (sq.id === g.questionId) question = sq;
+                    sq.subQuestions?.forEach((ssq: any) => {
+                      if (ssq.id === g.questionId) question = ssq;
+                    });
+                  });
+                });
+              }
+
+              return (
+                <div key={i} className="p-6 bg-stone-50 rounded-2xl border border-stone-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-stone-700">سؤال {i + 1}: {question?.text || 'سؤال محذوف'}</span>
+                    <div className="px-3 py-1 bg-white rounded-lg border border-stone-200 font-bold text-emerald-600">
+                      {g.grade} <span className="text-stone-300 text-xs">/ {question?.grade || '?'}</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mt-4">
+                    <div className="space-y-1">
+                      <span className="text-stone-400 block">إجابة الطالب:</span>
+                      <p className="p-3 bg-white rounded-xl border border-stone-100 italic">"{g.studentAnswer}"</p>
+                    </div>
+                    <div className="space-y-1">
+                      <span className="text-stone-400 block">الإجابة النموذجية:</span>
+                      <p className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800">"{question?.answer || 'غير متوفرة'}"</p>
+                    </div>
+                  </div>
+                  {g.feedback && (
+                    <div className="pt-2">
+                      <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">ملاحظات المصحح:</span>
+                      <p className="text-stone-600 text-sm mt-1">{g.feedback}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (selectedSession) {
+    return (
+      <motion.div 
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="space-y-8"
+      >
+        <div className="flex items-center justify-between">
+          <button onClick={() => setSelectedSession(null)} className="flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors">
+            <ArrowRight className="w-5 h-5" />
+            العودة لقائمة المجموعات
+          </button>
+          <div className="text-right">
+            <h3 className="text-xl font-bold">{selectedSession.examTitle}</h3>
+            <p className="text-stone-400 text-sm">{selectedSession.createdAt?.toDate().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
+          <table className="w-full text-right">
+            <thead>
+              <tr className="bg-stone-50 border-b border-stone-200">
+                <th className="px-6 py-4 font-bold text-stone-500 text-sm text-right">اسم الطالب</th>
+                <th className="px-6 py-4 font-bold text-stone-500 text-sm text-right">الدرجة</th>
+                <th className="px-6 py-4 font-bold text-stone-500 text-sm text-left">الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100">
+              {sessionResults.map((res: any) => (
+                <tr key={res.id} className="hover:bg-stone-50 transition-colors group">
+                  <td className="px-6 py-4 font-bold">{res.studentName}</td>
+                  <td className="px-6 py-4">
+                    <span className="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full font-bold text-sm">
+                      {res.totalGrade}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-left">
+                    <div className="flex items-center justify-end gap-2">
+                      <button 
+                        onClick={() => setSelectedResult(res)}
+                        className="px-4 py-1.5 rounded-lg bg-stone-100 text-stone-600 text-xs font-bold hover:bg-emerald-600 hover:text-white transition-all"
+                      >
+                        عرض التفاصيل
+                      </button>
+                      <button 
+                        onClick={() => exportPDF(res)}
+                        className="p-2 text-stone-300 hover:text-emerald-600 transition-colors"
+                        title="تحميل PDF"
+                      >
+                        <Download className="w-5 h-5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -1337,55 +1531,72 @@ function ResultsView({ results, exams, onBack }: any) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-3xl font-bold font-serif italic">نتائج الطلاب</h2>
-          <p className="text-stone-500">سجل بجميع الأوراق التي تم تصحيحها</p>
+          <p className="text-stone-500">مجموعات التصحيح المنظمة حسب التاريخ</p>
         </div>
         <button onClick={onBack} className="text-stone-400 hover:text-stone-900 transition-colors">العودة</button>
       </div>
 
-      <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
-        <table className="w-full text-right">
-          <thead>
-            <tr className="bg-stone-50 border-b border-stone-200">
-              <th className="px-6 py-4 font-bold text-stone-500 text-sm text-right">اسم الطالب</th>
-              <th className="px-6 py-4 font-bold text-stone-500 text-sm text-right">الامتحان</th>
-              <th className="px-6 py-4 font-bold text-stone-500 text-sm text-right">الدرجة</th>
-              <th className="px-6 py-4 font-bold text-stone-500 text-sm text-right">التاريخ</th>
-              <th className="px-6 py-4 font-bold text-stone-500 text-sm text-left">الإجراءات</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-stone-100">
-            {results.map((res: any) => (
-              <tr key={res.id} className="hover:bg-stone-50 transition-colors">
-                <td className="px-6 py-4 font-bold">{res.studentName}</td>
-                <td className="px-6 py-4 text-stone-500">{res.examTitle}</td>
-                <td className="px-6 py-4">
-                  <span className="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full font-bold text-sm">
-                    {res.totalGrade}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-stone-400 text-sm">
-                  {res.createdAt?.toDate().toLocaleDateString('ar-EG')}
-                </td>
-                <td className="px-6 py-4 text-left">
-                  <button 
-                    onClick={() => exportPDF(res)}
-                    className="p-2 text-stone-400 hover:text-emerald-600 transition-colors"
-                    title="تحميل PDF"
-                  >
-                    <Download className="w-5 h-5" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {results.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-6 py-20 text-center text-stone-400">
-                  لا توجد نتائج مسجلة بعد.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      {/* Filters */}
+      <div className="flex flex-wrap gap-4 bg-white p-6 rounded-3xl border border-stone-200 shadow-sm">
+        <div className="flex items-center gap-3">
+          <Calendar className="w-5 h-5 text-stone-400" />
+          <select 
+            value={selectedYear} 
+            onChange={(e) => setSelectedYear(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+            className="bg-stone-50 px-4 py-2 rounded-xl border border-stone-200 outline-none text-sm"
+          >
+            <option value="all">كل السنوات</option>
+            {years.map((y: any) => <option key={y} value={y}>{y}</option>)}
+          </select>
+          <select 
+            value={selectedMonth} 
+            onChange={(e) => setSelectedMonth(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+            className="bg-stone-50 px-4 py-2 rounded-xl border border-stone-200 outline-none text-sm"
+          >
+            <option value="all">كل الشهور</option>
+            {months.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+          </select>
+        </div>
+        <div className="mr-auto flex items-center gap-2 text-sm text-stone-400">
+          <span>إجمالي المجموعات:</span>
+          <span className="font-bold text-stone-900">{filteredSessions.length}</span>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredSessions.map((session: any) => (
+          <div 
+            key={session.id} 
+            onClick={() => setSelectedSession(session)}
+            className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm hover:shadow-md transition-all cursor-pointer group"
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div className="w-12 h-12 bg-stone-100 rounded-2xl flex items-center justify-center text-stone-600 group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors">
+                <Folder className="w-6 h-6" />
+              </div>
+              <div className="text-[10px] font-bold text-stone-400 bg-stone-50 px-2 py-1 rounded-lg">
+                {session.createdAt?.toDate().toLocaleDateString('ar-EG', { month: 'short', year: 'numeric' })}
+              </div>
+            </div>
+            <h3 className="text-lg font-bold mb-2 group-hover:text-emerald-600 transition-colors">{session.examTitle}</h3>
+            <div className="flex items-center gap-4 text-xs text-stone-500">
+              <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> {session.studentCount} طلاب</span>
+              <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {session.createdAt?.toDate().toLocaleDateString('ar-EG')}</span>
+            </div>
+            <div className="mt-6 flex items-center justify-between text-xs font-bold text-emerald-600">
+              <span>فتح المجموعة</span>
+              <ArrowRight className="w-4 h-4 rotate-180" />
+            </div>
+          </div>
+        ))}
+        {filteredSessions.length === 0 && (
+          <div className="col-span-full py-20 text-center bg-white rounded-3xl border-2 border-dashed border-stone-200">
+            <div className="w-16 h-16 bg-stone-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FolderOpen className="w-8 h-8 text-stone-300" />
+            </div>
+            <p className="text-stone-400">لا توجد مجموعات تصحيح مطابقة للبحث.</p>
+          </div>
+        )}
       </div>
     </motion.div>
   );

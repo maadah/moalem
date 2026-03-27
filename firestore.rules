@@ -16,9 +16,19 @@
 // Document ID: auto-generated
 // Fields:
 //   - examId: string (required)
+//   - sessionId: string (optional)
 //   - studentName: string (required)
 //   - totalGrade: number (required)
 //   - gradings: array of objects (required)
+//   - createdAt: timestamp (required)
+//   - authorUid: string (required)
+//
+// Collection: sessions
+// Document ID: auto-generated
+// Fields:
+//   - examId: string (required)
+//   - examTitle: string (required)
+//   - studentCount: number (required)
 //   - createdAt: timestamp (required)
 //   - authorUid: string (required)
 //
@@ -55,6 +65,13 @@ service cloud.firestore {
              data.authorUid == request.auth.uid;
     }
 
+    function isValidSession(data) {
+      return data.examId is string &&
+             data.examTitle is string &&
+             data.studentCount is number &&
+             data.authorUid == request.auth.uid;
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
@@ -70,6 +87,13 @@ service cloud.firestore {
       allow read: if isOwner(resource.data.authorUid);
       allow create: if isAuthenticated() && isValidResult(request.resource.data);
       allow update: if isOwner(resource.data.authorUid) && isValidResult(request.resource.data);
+      allow delete: if isOwner(resource.data.authorUid);
+    }
+
+    match /sessions/{sessionId} {
+      allow read: if isOwner(resource.data.authorUid);
+      allow create: if isAuthenticated() && isValidSession(request.resource.data);
+      allow update: if isOwner(resource.data.authorUid) && isValidSession(request.resource.data);
       allow delete: if isOwner(resource.data.authorUid);
     }
   }
