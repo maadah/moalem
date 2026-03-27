@@ -32,6 +32,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [exams, setExams] = useState<any[]>([]);
   const [selectedExam, setSelectedExam] = useState<any>(null);
+  const [editingExam, setEditingExam] = useState<any>(null);
   const [results, setResults] = useState<any[]>([]);
 
   useEffect(() => {
@@ -147,16 +148,18 @@ export default function App() {
           {view === 'dashboard' && (
             <Dashboard 
               exams={exams} 
-              onNewExam={() => setView('create-exam')} 
+              onNewExam={() => { setEditingExam(null); setView('create-exam'); }} 
               onGrade={(exam) => { setSelectedExam(exam); setView('grade-papers'); }}
+              onEditExam={(exam) => { setEditingExam(exam); setView('create-exam'); }}
               onDeleteExam={async (id) => { if(confirm('هل أنت متأكد من حذف هذا الامتحان؟')) await deleteDoc(doc(db, 'exams', id)); }}
             />
           )}
           {view === 'create-exam' && (
             <ExamCreator 
               user={user} 
-              onSave={() => setView('dashboard')} 
-              onCancel={() => setView('dashboard')} 
+              initialData={editingExam}
+              onSave={() => { setEditingExam(null); setView('dashboard'); }} 
+              onCancel={() => { setEditingExam(null); setView('dashboard'); }} 
             />
           )}
           {view === 'grade-papers' && (
@@ -195,7 +198,7 @@ function NavButton({ active, onClick, icon, label }: { active: boolean, onClick:
   );
 }
 
-function Dashboard({ exams, onNewExam, onGrade, onDeleteExam }: any) {
+function Dashboard({ exams, onNewExam, onGrade, onEditExam, onDeleteExam }: any) {
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -233,13 +236,22 @@ function Dashboard({ exams, onNewExam, onGrade, onDeleteExam }: any) {
               <span className="flex items-center gap-1"><CheckSquare className="w-4 h-4" /> {exam.questions.length} أسئلة</span>
               <span className="flex items-center gap-1"><Settings className="w-4 h-4" /> الدرجة: {exam.totalGrade}</span>
             </div>
-            <button 
-              onClick={() => onGrade(exam)}
-              className="w-full bg-stone-100 text-stone-900 py-3 rounded-xl font-medium hover:bg-emerald-600 hover:text-white transition-all flex items-center justify-center gap-2"
-            >
-              <FileUp className="w-4 h-4" />
-              بدء التصحيح
-            </button>
+            <div className="grid grid-cols-2 gap-2">
+              <button 
+                onClick={() => onGrade(exam)}
+                className="bg-stone-100 text-stone-900 py-3 rounded-xl font-medium hover:bg-emerald-600 hover:text-white transition-all flex items-center justify-center gap-2"
+              >
+                <FileUp className="w-4 h-4" />
+                بدء التصحيح
+              </button>
+              <button 
+                onClick={() => onEditExam(exam)}
+                className="bg-stone-100 text-stone-900 py-3 rounded-xl font-medium hover:bg-stone-200 transition-all flex items-center justify-center gap-2"
+              >
+                <Settings className="w-4 h-4" />
+                تعديل
+              </button>
+            </div>
           </div>
         ))}
         {exams.length === 0 && (
@@ -255,11 +267,11 @@ function Dashboard({ exams, onNewExam, onGrade, onDeleteExam }: any) {
   );
 }
 
-function ExamCreator({ user, onSave, onCancel }: any) {
-  const [title, setTitle] = useState('');
-  const [totalGrade, setTotalGrade] = useState(100);
-  const [requiredQuestionsCount, setRequiredQuestionsCount] = useState<number | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
+function ExamCreator({ user, initialData, onSave, onCancel }: any) {
+  const [title, setTitle] = useState(initialData?.title || '');
+  const [totalGrade, setTotalGrade] = useState(initialData?.totalGrade || 100);
+  const [requiredQuestionsCount, setRequiredQuestionsCount] = useState<number | null>(initialData?.requiredQuestionsCount || null);
+  const [questions, setQuestions] = useState<Question[]>(initialData?.questions || []);
   const [isSaving, setIsSaving] = useState(false);
 
   const addQuestion = () => {
@@ -395,14 +407,23 @@ function ExamCreator({ user, onSave, onCancel }: any) {
     if (!title || questions.length === 0) return alert('يرجى إدخال عنوان الامتحان وسؤال واحد على الأقل');
     setIsSaving(true);
     try {
-      await addDoc(collection(db, 'exams'), {
+      const examData = {
         title,
         totalGrade,
         requiredQuestionsCount: requiredQuestionsCount || questions.length,
         questions,
         authorUid: user.uid,
-        createdAt: serverTimestamp()
-      });
+        updatedAt: serverTimestamp()
+      };
+
+      if (initialData?.id) {
+        await updateDoc(doc(db, 'exams', initialData.id), examData);
+      } else {
+        await addDoc(collection(db, 'exams'), {
+          ...examData,
+          createdAt: serverTimestamp()
+        });
+      }
       onSave();
     } catch (e) {
       console.error(e);
@@ -453,7 +474,9 @@ function ExamCreator({ user, onSave, onCancel }: any) {
       className="max-w-4xl mx-auto space-y-8"
     >
       <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold font-serif italic">إنشاء امتحان جديد</h2>
+        <h2 className="text-3xl font-bold font-serif italic">
+          {initialData ? 'تعديل الامتحان' : 'إنشاء امتحان جديد'}
+        </h2>
         <div className="flex gap-3">
           <button onClick={onCancel} className="px-6 py-2 rounded-xl text-stone-500 hover:bg-stone-100 transition-colors">إلغاء</button>
           <button onClick={printExam} className="px-6 py-2 rounded-xl bg-stone-900 text-white flex items-center gap-2 hover:bg-stone-800"><Download className="w-4 h-4" /> معاينة PDF</button>
