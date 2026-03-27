@@ -901,6 +901,21 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
 
                       {/* Level 3: Points inside a Branch */}
                       <div className="mr-6 space-y-2 border-r border-stone-200 pr-3">
+                        {sq.subQuestions && sq.subQuestions.length > 0 && (
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[9px] font-bold text-stone-400">النقاط والترك:</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[9px] text-stone-400">عدد النقاط المطلوب حلها:</span>
+                              <input 
+                                type="number" 
+                                value={sq.requiredSubCount || ''} 
+                                onChange={(e) => updateQuestion(sq.id, { requiredSubCount: e.target.value ? Number(e.target.value) : undefined }, q.id)}
+                                placeholder={sq.subQuestions?.length.toString()}
+                                className="w-8 px-1 py-0.5 rounded border border-stone-200 text-[9px] text-center"
+                              />
+                            </div>
+                          </div>
+                        )}
                         {sq.subQuestions?.map((ssq, ssqIndex) => (
                           <div key={ssq.id} className="flex items-center gap-2 bg-stone-50/50 p-2 rounded-lg border border-stone-100">
                             <span className="text-[10px] font-bold text-emerald-500">{ssqIndex + 1}-</span>
