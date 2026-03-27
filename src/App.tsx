@@ -3,7 +3,7 @@ import {
   Plus, Trash2, Save, FileText, Upload, CheckCircle, 
   XCircle, ChevronDown, ChevronUp, Download, LogIn, 
   LogOut, Loader2, FileUp, List, Settings, User,
-  HelpCircle, CheckSquare, Type, LayoutGrid
+  HelpCircle, CheckSquare, Type, LayoutGrid, Image as ImageIcon
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -179,6 +179,94 @@ export default function App() {
           )}
         </AnimatePresence>
       </main>
+    </div>
+  );
+}
+
+function ImageUpload({ 
+  label, 
+  value, 
+  onChange, 
+  onRemove,
+  compact = false
+}: { 
+  label: string, 
+  value?: string, 
+  onChange: (base64: string) => void, 
+  onRemove: () => void,
+  compact?: boolean
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        onChange(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  return (
+    <div className={cn("space-y-1", compact ? "w-12" : "w-full")}>
+      {!compact && (
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-medium text-stone-400">{label}</span>
+          {value && (
+            <button 
+              onClick={onRemove}
+              className="text-[10px] text-red-500 hover:underline"
+            >
+              حذف
+            </button>
+          )}
+        </div>
+      )}
+      {value ? (
+        <div className="relative group/img">
+          <img 
+            src={value} 
+            alt={label} 
+            className={cn("object-cover rounded-lg border border-stone-200", compact ? "w-10 h-10" : "w-full h-24")}
+            referrerPolicy="no-referrer"
+          />
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center rounded-lg"
+          >
+            <ImageIcon className={cn("text-white", compact ? "w-3 h-3" : "w-5 h-5")} />
+          </button>
+          {compact && (
+            <button 
+              onClick={onRemove}
+              className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover/img:opacity-100 transition-opacity"
+            >
+              <XCircle className="w-2.5 h-2.5" />
+            </button>
+          )}
+        </div>
+      ) : (
+        <button 
+          onClick={() => fileInputRef.current?.click()}
+          className={cn(
+            "border-2 border-dashed border-stone-200 rounded-lg flex items-center justify-center gap-2 text-stone-400 hover:border-emerald-500 hover:text-emerald-500 transition-all",
+            compact ? "w-10 h-10" : "w-full h-10"
+          )}
+          title={label}
+        >
+          <ImageIcon className={cn(compact ? "w-3 h-3" : "w-4 h-4")} />
+          {!compact && <span className="text-[10px]">إضافة صورة</span>}
+        </button>
+      )}
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleFileChange} 
+        accept="image/*" 
+        className="hidden" 
+      />
     </div>
   );
 }
@@ -590,6 +678,23 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
                   rows={1}
                   className="w-full bg-white px-4 py-2 rounded-xl border border-stone-200 outline-none focus:ring-2 focus:ring-emerald-500 overflow-hidden resize-none"
                 />
+
+                {(!q.subQuestions || q.subQuestions.length === 0) && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <ImageUpload 
+                      label="صورة السؤال" 
+                      value={q.questionImage} 
+                      onChange={(base64) => updateQuestion(q.id, { questionImage: base64 })}
+                      onRemove={() => updateQuestion(q.id, { questionImage: undefined })}
+                    />
+                    <ImageUpload 
+                      label="صورة الجواب" 
+                      value={q.answerImage} 
+                      onChange={(base64) => updateQuestion(q.id, { answerImage: base64 })}
+                      onRemove={() => updateQuestion(q.id, { answerImage: undefined })}
+                    />
+                  </div>
+                )}
                 
                 {/* Sub-questions Section */}
                 <div className="mr-8 space-y-3 border-r-2 border-emerald-100 pr-4">
@@ -664,6 +769,15 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
                           className="flex-1 bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-200 text-sm outline-none focus:ring-2 focus:ring-emerald-500 overflow-hidden resize-none"
                         />
                         <div className="flex items-center gap-2">
+                          <ImageUpload 
+                            label="صورة" 
+                            value={sq.questionImage} 
+                            onChange={(base64) => updateQuestion(sq.id, { questionImage: base64 }, q.id)}
+                            onRemove={() => updateQuestion(sq.id, { questionImage: undefined }, q.id)}
+                            compact
+                          />
+                        </div>
+                        <div className="flex items-center gap-2">
                           <span className="text-[10px] text-stone-400">الدرجة:</span>
                           <input 
                             type="number" 
@@ -696,6 +810,22 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
                               rows={1}
                               className="flex-1 bg-transparent text-[11px] outline-none resize-none overflow-hidden"
                             />
+                            <div className="flex items-center gap-1">
+                              <ImageUpload 
+                                label="صورة السؤال" 
+                                value={ssq.questionImage} 
+                                onChange={(base64) => updateQuestion(ssq.id, { questionImage: base64 }, q.id, sq.id)}
+                                onRemove={() => updateQuestion(ssq.id, { questionImage: undefined }, q.id, sq.id)}
+                                compact
+                              />
+                              <ImageUpload 
+                                label="صورة الجواب" 
+                                value={ssq.answerImage} 
+                                onChange={(base64) => updateQuestion(ssq.id, { answerImage: base64 }, q.id, sq.id)}
+                                onRemove={() => updateQuestion(ssq.id, { answerImage: undefined }, q.id, sq.id)}
+                                compact
+                              />
+                            </div>
                             <input 
                               type="text" 
                               value={ssq.answer} 
@@ -762,6 +892,14 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
                         rows={1}
                         className="w-full bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-100 text-xs outline-none focus:ring-2 focus:ring-emerald-500 overflow-hidden resize-none min-h-[40px]"
                       />
+                      <div className="grid grid-cols-2 gap-4 mt-2">
+                        <ImageUpload 
+                          label="صورة الجواب للفرع" 
+                          value={sq.answerImage} 
+                          onChange={(base64) => updateQuestion(sq.id, { answerImage: base64 }, q.id)}
+                          onRemove={() => updateQuestion(sq.id, { answerImage: undefined }, q.id)}
+                        />
+                      </div>
                     </div>
                   ))}
                   <div className="flex items-center gap-4 pt-2">

@@ -10,6 +10,8 @@ export interface Question {
   subQuestions?: Question[];
   requiredSubCount?: number;
   subStyle?: 'numbers' | 'letters';
+  questionImage?: string;
+  answerImage?: string;
 }
 
 export interface GradingResult {
@@ -106,6 +108,7 @@ export async function gradeStudentPaper(
     - The questions are hierarchical: Level 1 (Main Question), Level 2 (Branch/Point), Level 3 (Point inside Branch).
     - Sub-questions might be lettered (a, b, c) or numbered (1, 2, 3) depending on the "subStyle" property.
     - Identify answers at the lowest level of the hierarchy (leaf nodes).
+    - Some questions or answers in the exam structure may include images (provided as base64 data in 'questionImage' or 'answerImage' fields). Use these images to understand the context of the question and the expected answer.
     4. Compare the student's answer with the model answer.
     5. Assign a grade for each question/sub-question based on accuracy. Be fair but strict as a teacher.
     6. Provide brief feedback for each answer.
