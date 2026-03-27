@@ -44,6 +44,64 @@ const getApiKey = () => {
   return localStorage.getItem('GEMINI_API_KEY_AUTO') || '';
 };
 
+export async function extractExamFromImages(base64Images: string[], apiKey: string): Promise<{ title: string, questions: Question[] }> {
+  const ai = new GoogleGenAI({ apiKey });
+  const prompt = `
+    Analyze the provided images of an exam paper and extract the questions and answers into a structured JSON format.
+    
+    HIERARCHY RULES:
+    1. Level 1: Main Questions (e.g., Q1, Q2, S1, S2).
+    2. Level 2: Branches (e.g., a, b, c or أ، ب، ج).
+    3. Level 3: Points (e.g., 1, 2, 3).
+    
+    EXTRACTION RULES:
+    - If a question has sub-parts (branches), put them in the "subQuestions" array.
+    - If a branch has sub-parts (points), put them in the "subQuestions" array of that branch.
+    - Extract the "text" for each question/branch/point.
+    - If the image contains model answers or student answers, extract them into the "answer" field.
+    - If no answers are found, leave the "answer" field empty.
+    - Assign a "grade" if mentioned in the image (e.g., "5 marks" or "5 درجات").
+    - Identify the "type" (text, true-false, multiple-choice, fill-in-the-blanks).
+    - For multiple-choice, extract the "options".
+    - Try to extract a logical "title" for the exam from the header.
+    - Generate a unique ID for each question/sub-question.
+    
+    OUTPUT FORMAT (JSON ONLY):
+    {
+      "title": "Exam Title",
+      "questions": [
+        {
+          "id": "unique_id",
+          "text": "Question text",
+          "answer": "Answer text (if found)",
+          "grade": number,
+          "type": "text|true-false|multiple-choice|fill-in-the-blanks",
+          "options": ["opt1", "opt2"],
+          "subStyle": "letters|numbers",
+          "subQuestions": [ ... nested sub-questions ... ]
+        }
+      ]
+    }
+  `;
+
+  const imageParts = base64Images.map((base64) => ({
+    inlineData: {
+      data: base64.split(',')[1] || base64,
+      mimeType: "image/jpeg",
+    },
+  }));
+
+  const response = await ai.models.generateContent({
+    model: "gemini-3.1-pro-preview",
+    contents: { parts: [...imageParts, { text: prompt }] },
+    config: {
+      responseMimeType: "application/json",
+    }
+  });
+
+  return JSON.parse(response.text);
+}
+
 export async function gradeStudentPaper(
   imageUrls: string[],
   questions: Question[],

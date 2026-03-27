@@ -14,7 +14,7 @@ import {
   serverTimestamp, doc, updateDoc, deleteDoc, getDoc
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { Question, gradeStudentPaper } from './services/geminiService';
+import { Question, gradeStudentPaper, extractExamFromImages } from './services/geminiService';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { clsx, type ClassValue } from 'clsx';
@@ -361,6 +361,52 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
   const [requiredQuestionsCount, setRequiredQuestionsCount] = useState<number | null>(initialData?.requiredQuestionsCount || null);
   const [questions, setQuestions] = useState<Question[]>(initialData?.questions || []);
   const [isSaving, setIsSaving] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [extractionImages, setExtractionImages] = useState<string[]>([]);
+  const extractionInputRef = useRef<HTMLInputElement>(null);
+
+  const handleExtractionFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length > 0) {
+      const readers = files.map(file => {
+        return new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(file);
+        });
+      });
+
+      Promise.all(readers).then(results => {
+        setExtractionImages(prev => [...prev, ...results]);
+      });
+    }
+  };
+
+  const handleExtract = async () => {
+    if (extractionImages.length === 0) return;
+    setIsExtracting(true);
+    try {
+      // Get API key
+      const urlParams = new URLSearchParams(window.location.search);
+      const apiKey = urlParams.get('key') || localStorage.getItem('GEMINI_API_KEY_AUTO') || import.meta.env.VITE_GEMINI_API_KEY;
+      
+      if (!apiKey) {
+        alert('يرجى توفير مفتاح API أولاً');
+        return;
+      }
+
+      const result = await extractExamFromImages(extractionImages, apiKey);
+      if (result.title) setTitle(result.title);
+      if (result.questions) setQuestions(result.questions);
+      setExtractionImages([]);
+      alert('تم استخراج الأسئلة بنجاح');
+    } catch (e) {
+      console.error(e);
+      alert('حدث خطأ أثناء استخراج الأسئلة');
+    } finally {
+      setIsExtracting(false);
+    }
+  };
 
   const addQuestion = () => {
     setQuestions([...questions, {
@@ -566,6 +612,21 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
           {initialData ? 'تعديل الامتحان' : 'إنشاء امتحان جديد'}
         </h2>
         <div className="flex gap-3">
+          <button 
+            onClick={() => extractionInputRef.current?.click()}
+            className="px-6 py-2 rounded-xl bg-stone-100 text-stone-900 flex items-center gap-2 hover:bg-stone-200 transition-all"
+          >
+            <FileUp className="w-4 h-4" />
+            استخراج من صور
+          </button>
+          <input 
+            type="file" 
+            ref={extractionInputRef} 
+            onChange={handleExtractionFileChange} 
+            accept="image/*" 
+            multiple 
+            className="hidden" 
+          />
           <button onClick={onCancel} className="px-6 py-2 rounded-xl text-stone-500 hover:bg-stone-100 transition-colors">إلغاء</button>
           <button onClick={printExam} className="px-6 py-2 rounded-xl bg-stone-900 text-white flex items-center gap-2 hover:bg-stone-800"><Download className="w-4 h-4" /> معاينة PDF</button>
           <button 
@@ -578,6 +639,50 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
           </button>
         </div>
       </div>
+
+      {extractionImages.length > 0 && (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 space-y-4"
+        >
+          <div className="flex items-center justify-between">
+            <h3 className="text-emerald-800 font-bold flex items-center gap-2">
+              <ImageIcon className="w-5 h-5" />
+              صور جاهزة للاستخراج ({extractionImages.length})
+            </h3>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setExtractionImages([])}
+                className="text-stone-500 text-sm hover:underline"
+              >
+                إلغاء الكل
+              </button>
+              <button 
+                onClick={handleExtract}
+                disabled={isExtracting}
+                className="bg-emerald-600 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {isExtracting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                بدء الاستخراج الذكي
+              </button>
+            </div>
+          </div>
+          <div className="flex gap-4 overflow-x-auto pb-2">
+            {extractionImages.map((img, i) => (
+              <div key={i} className="relative flex-shrink-0">
+                <img src={img} alt="" className="w-24 h-24 object-cover rounded-xl border border-emerald-200" />
+                <button 
+                  onClick={() => setExtractionImages(prev => prev.filter((_, idx) => idx !== i))}
+                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg"
+                >
+                  <XCircle className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       <div className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
