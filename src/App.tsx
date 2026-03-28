@@ -18,6 +18,7 @@ import { auth, db } from './firebase';
 import { Question, gradeStudentPaper, extractExamFromImages } from './services/geminiService';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -376,6 +377,7 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionImages, setExtractionImages] = useState<string[]>([]);
   const extractionInputRef = useRef<HTMLInputElement>(null);
+  const examPrintRef = useRef<HTMLDivElement>(null);
 
   const handleExtractionFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -580,37 +582,34 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
     }
   };
 
-  const printExam = () => {
-    const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-    doc.setFont("helvetica");
-    doc.text(title, 105, 20, { align: 'center' });
-    doc.text(`Total Grade: ${totalGrade}`, 105, 30, { align: 'center' });
-    doc.text(`Required Questions: ${requiredQuestionsCount || questions.length}`, 105, 40, { align: 'center' });
+  const printExam = async () => {
+    if (!examPrintRef.current) return;
     
-    let y = 55;
-    questions.forEach((q, i) => {
-      doc.text(`${i + 1}. ${q.text} (${q.grade} marks)`, 20, y);
-      if (q.requiredSubCount && q.subQuestions && q.subQuestions.length > 0) {
-        y += 7;
-        doc.setFontSize(10);
-        doc.text(`   (Answer ${q.requiredSubCount} out of ${q.subQuestions.length} branches)`, 20, y);
-        doc.setFontSize(12);
-      }
-      y += 10;
-      if (q.type === 'multiple-choice' && q.options) {
-        q.options.forEach(opt => {
-          doc.text(`   [ ] ${opt}`, 20, y);
-          y += 7;
-        });
-      } else if (q.type === 'true-false') {
-        doc.text(`   ( ) True   ( ) False`, 20, y);
-        y += 7;
-      } else {
-        y += 15; // Space for answer
-      }
-      if (y > 270) { doc.addPage(); y = 20; }
-    });
-    doc.save(`${title}.pdf`);
+    try {
+      const canvas = await html2canvas(examPrintRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`${title || 'exam'}.pdf`);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('حدث خطأ أثناء إنشاء ملف PDF');
+    }
   };
 
   return (
@@ -620,7 +619,7 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
       exit={{ opacity: 0, x: -20 }}
       className="max-w-4xl mx-auto space-y-8"
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between" data-html2canvas-ignore>
         <h2 className="text-3xl font-bold font-serif italic">
           {initialData ? 'تعديل الامتحان' : 'إنشاء امتحان جديد'}
         </h2>
@@ -697,7 +696,7 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
         </motion.div>
       )}
 
-      <div className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
+      <div ref={examPrintRef} className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="space-y-2">
             <label className="text-sm font-medium text-stone-500">عنوان الامتحان</label>
@@ -739,7 +738,7 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
         </div>
 
         <div className="space-y-6">
-          <div className="flex items-center justify-between border-t border-stone-100 pt-6">
+          <div className="flex items-center justify-between border-t border-stone-100 pt-6" data-html2canvas-ignore>
             <h3 className="text-xl font-bold">الأسئلة</h3>
             <button 
               onClick={addQuestion}
@@ -1035,7 +1034,7 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
                       </div>
                     </div>
                   ))}
-                  <div className="flex items-center gap-4 pt-2">
+                  <div className="flex items-center gap-4 pt-2" data-html2canvas-ignore>
                     <button 
                       onClick={() => addSubQuestion(q.id, undefined, 'letters')}
                       className="text-[10px] text-emerald-600 font-bold hover:underline flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-lg"
@@ -1333,27 +1332,36 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
   const [selectedMonth, setSelectedMonth] = useState<number | 'all'>('all');
 
-  const exportPDF = (result: any) => {
-    const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
-    doc.setFont("helvetica");
-    doc.text(`Exam Results: ${result.examTitle}`, 105, 20, { align: 'center' });
-    doc.text(`Student: ${result.studentName}`, 105, 30, { align: 'center' });
-    doc.text(`Total Grade: ${result.totalGrade}`, 105, 40, { align: 'center' });
+  const resultPrintRef = useRef<HTMLDivElement>(null);
 
-    const tableData = result.gradings.map((g: any, i: number) => [
-      i + 1,
-      g.studentAnswer,
-      g.grade,
-      g.feedback
-    ]);
-
-    autoTable(doc, {
-      startY: 50,
-      head: [['#', 'Student Answer', 'Grade', 'Feedback']],
-      body: tableData,
-    });
-
-    doc.save(`${result.studentName}_result.pdf`);
+  const exportPDF = async (result: any) => {
+    if (!resultPrintRef.current) return;
+    
+    try {
+      const canvas = await html2canvas(resultPrintRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff'
+      });
+      
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`${result.studentName}_result.pdf`);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      alert('حدث خطأ أثناء إنشاء ملف PDF');
+    }
   };
 
   const years = Array.from(new Set(sessions.map((s: any) => s.createdAt?.toDate().getFullYear()))).sort((a: any, b: any) => b - a);
@@ -1382,7 +1390,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
         animate={{ opacity: 1, x: 0 }}
         className="space-y-8"
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between" data-html2canvas-ignore>
           <button onClick={() => setSelectedResult(null)} className="flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors">
             <ArrowRight className="w-5 h-5" />
             العودة لقائمة الطلاب
@@ -1396,7 +1404,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
           </button>
         </div>
 
-        <div className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-8">
+        <div ref={resultPrintRef} className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-8">
           <div className="flex items-center justify-between border-b border-stone-100 pb-6">
             <div>
               <h3 className="text-2xl font-bold">الطالب: {selectedResult.studentName}</h3>
