@@ -14,7 +14,8 @@ import {
   collection, addDoc, query, where, onSnapshot, 
   serverTimestamp, doc, updateDoc, deleteDoc, getDoc
 } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { ref, uploadString, getDownloadURL } from 'firebase/storage';
+import { auth, db, storage } from './firebase';
 import { Question, gradeStudentPaper, extractExamFromImages } from './services/geminiService';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -379,6 +380,36 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
   const extractionInputRef = useRef<HTMLInputElement>(null);
   const examPrintRef = useRef<HTMLDivElement>(null);
 
+  const uploadImageToStorage = async (base64: string, path: string) => {
+    if (!base64 || !base64.startsWith('data:image')) return base64;
+    try {
+      const storageRef = ref(storage, path);
+      await uploadString(storageRef, base64, 'data_url');
+      return await getDownloadURL(storageRef);
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      return base64; // Fallback to base64 if upload fails
+    }
+  };
+
+  const processQuestionsForStorage = async (qs: Question[]): Promise<Question[]> => {
+    const processed = [];
+    for (const q of qs) {
+      const newQ = { ...q };
+      if (q.questionImage && q.questionImage.startsWith('data:image')) {
+        newQ.questionImage = await uploadImageToStorage(q.questionImage, `exams/${user.uid}/${q.id}_q_${Date.now()}`);
+      }
+      if (q.answerImage && q.answerImage.startsWith('data:image')) {
+        newQ.answerImage = await uploadImageToStorage(q.answerImage, `exams/${user.uid}/${q.id}_a_${Date.now()}`);
+      }
+      if (q.subQuestions) {
+        newQ.subQuestions = await processQuestionsForStorage(q.subQuestions);
+      }
+      processed.push(newQ);
+    }
+    return processed;
+  };
+
   const handleExtractionFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length > 0) {
@@ -556,11 +587,13 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
     if (!title || questions.length === 0) return alert('يرجى إدخال عنوان الامتحان وسؤال واحد على الأقل');
     setIsSaving(true);
     try {
+      const processedQuestions = await processQuestionsForStorage(questions);
+      
       const examData = {
         title,
         totalGrade,
         requiredQuestionsCount: requiredQuestionsCount || questions.length,
-        questions,
+        questions: processedQuestions,
         authorUid: user.uid,
         updatedAt: serverTimestamp()
       };
@@ -576,7 +609,7 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
       onSave();
     } catch (e) {
       console.error(e);
-      alert('حدث خطأ أثناء الحفظ');
+      alert('حدث خطأ أثناء الحفظ. قد يكون حجم الصور كبيراً جداً.');
     } finally {
       setIsSaving(false);
     }
@@ -1257,7 +1290,17 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
                 return (
                   <div key={i} className="p-6 bg-stone-50 rounded-2xl border border-stone-100 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold">سؤال {i + 1}: {question?.text}</span>
+                      <div className="flex flex-col gap-2">
+                        <span className="font-bold">سؤال {i + 1}: {question?.text}</span>
+                        {question?.questionImage && (
+                          <img 
+                            src={question.questionImage} 
+                            alt="سؤال" 
+                            className="w-32 h-32 object-cover rounded-xl border border-stone-200" 
+                            referrerPolicy="no-referrer"
+                          />
+                        )}
+                      </div>
                       <div className="flex items-center gap-2">
                         <input 
                           type="number" 
@@ -1282,7 +1325,17 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
                       </div>
                       <div className="space-y-1">
                         <span className="text-stone-400 block">الإجابة النموذجية:</span>
-                        <p className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800">"{question?.answer}"</p>
+                        <div className="flex flex-col gap-2">
+                          <p className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800">"{question?.answer}"</p>
+                          {question?.answerImage && (
+                            <img 
+                              src={question.answerImage} 
+                              alt="إجابة نموذجية" 
+                              className="w-32 h-32 object-cover rounded-xl border border-emerald-100" 
+                              referrerPolicy="no-referrer"
+                            />
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="pt-2">
@@ -1438,7 +1491,17 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
               return (
                 <div key={i} className="p-6 bg-stone-50 rounded-2xl border border-stone-100 space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-stone-700">سؤال {i + 1}: {question?.text || 'سؤال محذوف'}</span>
+                    <div className="flex flex-col gap-2">
+                      <span className="font-bold text-stone-700">سؤال {i + 1}: {question?.text || 'سؤال محذوف'}</span>
+                      {question?.questionImage && (
+                        <img 
+                          src={question.questionImage} 
+                          alt="سؤال" 
+                          className="w-32 h-32 object-cover rounded-xl border border-stone-200" 
+                          referrerPolicy="no-referrer"
+                        />
+                      )}
+                    </div>
                     <div className="px-3 py-1 bg-white rounded-lg border border-stone-200 font-bold text-emerald-600">
                       {g.grade} <span className="text-stone-300 text-xs">/ {question?.grade || '?'}</span>
                     </div>
@@ -1450,7 +1513,17 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
                     </div>
                     <div className="space-y-1">
                       <span className="text-stone-400 block">الإجابة النموذجية:</span>
-                      <p className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800">"{question?.answer || 'غير متوفرة'}"</p>
+                      <div className="flex flex-col gap-2">
+                        <p className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800">"{question?.answer || 'غير متوفرة'}"</p>
+                        {question?.answerImage && (
+                          <img 
+                            src={question.answerImage} 
+                            alt="إجابة نموذجية" 
+                            className="w-32 h-32 object-cover rounded-xl border border-emerald-100" 
+                            referrerPolicy="no-referrer"
+                          />
+                        )}
+                      </div>
                     </div>
                   </div>
                   {g.feedback && (
