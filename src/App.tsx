@@ -1278,20 +1278,25 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
 
             <div className="space-y-4">
               {currentGrading.gradings.map((g: any, i: number) => {
-                // Find question or sub-question
+                // Find question or sub-question (3 levels)
                 let question: any = null;
                 exam.questions.forEach((q: any) => {
                   if (q.id === g.questionId) question = q;
                   q.subQuestions?.forEach((sq: any) => {
                     if (sq.id === g.questionId) question = sq;
+                    sq.subQuestions?.forEach((ssq: any) => {
+                      if (ssq.id === g.questionId) question = ssq;
+                    });
                   });
                 });
+
+                const isParent = question?.subQuestions && question.subQuestions.length > 0;
 
                 return (
                   <div key={i} className="p-6 bg-stone-50 rounded-2xl border border-stone-100 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex flex-col gap-2">
-                        <span className="font-bold">سؤال {i + 1}: {question?.text}</span>
+                        <span className="font-bold">سؤال {i + 1}: {question?.text || 'سؤال محذوف'}</span>
                         {question?.questionImage && (
                           <img 
                             src={question.questionImage} 
@@ -1315,29 +1320,31 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
                           }}
                           className="w-16 px-2 py-1 rounded-lg border border-stone-200 text-center font-bold text-emerald-600"
                         />
-                        <span className="text-stone-400">/ {question?.grade}</span>
+                        <span className="text-stone-400">/ {question?.grade || '?'}</span>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div className="space-y-1">
-                        <span className="text-stone-400 block">إجابة الطالب:</span>
-                        <p className="p-3 bg-white rounded-xl border border-stone-100 italic">"{g.studentAnswer}"</p>
-                      </div>
-                      <div className="space-y-1">
-                        <span className="text-stone-400 block">الإجابة النموذجية:</span>
-                        <div className="flex flex-col gap-2">
-                          <p className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800">"{question?.answer}"</p>
-                          {question?.answerImage && (
-                            <img 
-                              src={question.answerImage} 
-                              alt="إجابة نموذجية" 
-                              className="w-32 h-32 object-cover rounded-xl border border-emerald-100" 
-                              referrerPolicy="no-referrer"
-                            />
-                          )}
+                    {!isParent && (
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div className="space-y-1">
+                          <span className="text-stone-400 block">إجابة الطالب:</span>
+                          <p className="p-3 bg-white rounded-xl border border-stone-100 italic">"{g.studentAnswer}"</p>
+                        </div>
+                        <div className="space-y-1">
+                          <span className="text-stone-400 block">الإجابة النموذجية:</span>
+                          <div className="flex flex-col gap-2">
+                            <p className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800">"{question?.answer || 'غير متوفرة'}"</p>
+                            {question?.answerImage && (
+                              <img 
+                                src={question.answerImage} 
+                                alt="إجابة نموذجية" 
+                                className="w-32 h-32 object-cover rounded-xl border border-emerald-100" 
+                                referrerPolicy="no-referrer"
+                              />
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
                     <div className="pt-2">
                       <span className="text-xs font-bold text-stone-400 uppercase">ملاحظات المصحح:</span>
                       <p className="text-stone-600 mt-1">{g.feedback}</p>
@@ -1488,6 +1495,8 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
                 });
               }
 
+              const isParent = question?.subQuestions && question.subQuestions.length > 0;
+
               return (
                 <div key={i} className="p-6 bg-stone-50 rounded-2xl border border-stone-100 space-y-3">
                   <div className="flex items-center justify-between">
@@ -1506,7 +1515,8 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
                       {g.grade} <span className="text-stone-300 text-xs">/ {question?.grade || '?'}</span>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mt-4">
+                  {!isParent && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mt-4">
                     <div className="space-y-1">
                       <span className="text-stone-400 block">إجابة الطالب:</span>
                       <p className="p-3 bg-white rounded-xl border border-stone-100 italic">"{g.studentAnswer}"</p>
@@ -1526,7 +1536,8 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
                       </div>
                     </div>
                   </div>
-                  {g.feedback && (
+                )}
+                {g.feedback && (
                     <div className="pt-2">
                       <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">ملاحظات المصحح:</span>
                       <p className="text-stone-600 text-sm mt-1">{g.feedback}</p>
