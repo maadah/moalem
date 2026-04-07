@@ -107,24 +107,60 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
   return JSON.parse(response.text);
 }
 
+async function compressImage(url: string, maxWidth = 1600, maxHeight = 1600, quality = 0.7): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.src = url;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > maxWidth) {
+          height *= maxWidth / width;
+          width = maxWidth;
+        }
+      } else {
+        if (height > maxHeight) {
+          width *= maxHeight / height;
+          height = maxHeight;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return reject('Could not get canvas context');
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      const base64 = canvas.toDataURL('image/jpeg', quality);
+      resolve(base64.split(',')[1]);
+    };
+    img.onerror = reject;
+  });
+}
+
 export async function gradeStudentPaper(
   imageUrls: string[],
   questions: Question[],
   totalExamGrade: number,
-  requiredQuestionsCount: number
+  requiredQuestionsCount: number,
+  onProgress?: (current: number, total: number) => void
 ): Promise<{ results: { studentName: string; gradings: GradingResult[]; totalGrade: number }[] }> {
-  // Convert image URLs (blobs) to base64 strings
-  const base64Images = await Promise.all(
-    imageUrls.map(async (url) => {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      return new Promise<string>((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-        reader.readAsDataURL(blob);
-      });
-    })
-  );
+  const totalImages = imageUrls.length;
+  
+  // Convert and compress images
+  const base64Images = [];
+  for (let i = 0; i < imageUrls.length; i++) {
+    if (onProgress) onProgress(i + 1, totalImages);
+    try {
+      const compressed = await compressImage(imageUrls[i]);
+      base64Images.push(compressed);
+    } catch (e) {
+      console.error(`Error compressing image ${i}:`, e);
+    }
+  }
 
   // 1. Try Backend API first (Secure & Preferred)
   try {
@@ -137,88 +173,73 @@ export async function gradeStudentPaper(
     if (response.ok) {
       return await response.json();
     }
-    // If 404, it means we are on a static host like Netlify Drop, so fallback to client-side
-    if (response.status !== 404) {
-      const errorData = await response.json();
-      throw new Error(errorData.error || 'فشل التصحيح التلقائي');
-    }
-  } catch (e: any) {
-    if (e.message && !e.message.includes('404')) {
-      throw e;
-    }
-  }
+  } catch (e) {}
 
-  // 2. Fallback to Client-side (For Static Hosting / Netlify Drop)
+  // 2. Fallback to Client-side
   const apiKey = getApiKey();
   if (!apiKey) {
-    throw new Error("مفتاح API مفقود. يرجى إضافة ?key=YOUR_KEY في نهاية رابط الموقع لمرة واحدة لتفعيله تلقائياً.");
+    throw new Error("مفتاح API مفقود.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
-  const prompt = `
-    You are an expert teacher grading a student's handwritten exam paper.
+  
+  // If we have many images, we should process them in smaller batches to avoid hitting payload limits
+  // and to prevent the browser from hanging.
+  const BATCH_SIZE = 5;
+  const allResults: any[] = [];
+
+  for (let i = 0; i < base64Images.length; i += BATCH_SIZE) {
+    const batch = base64Images.slice(i, i + BATCH_SIZE);
     
-    EXAM QUESTIONS AND MODEL ANSWERS:
-    ${JSON.stringify(questions, null, 2)}
-    
-    TOTAL EXAM GRADE: ${totalExamGrade}
-    REQUIRED QUESTIONS COUNT: ${requiredQuestionsCount}
-    
-    INSTRUCTIONS:
-    1. Analyze the provided images of the student's handwritten paper.
-    2. Extract the student's name from the first page. If not found, use "Unknown Student".
-    3. For each question (including sub-questions like 1a, 1b or 1-1, 1-2, etc.), identify the student's answer.
-    - The questions are hierarchical: Level 1 (Main Question), Level 2 (Branch/Point), Level 3 (Point inside Branch).
-    - Sub-questions might be lettered (a, b, c) or numbered (1, 2, 3) depending on the "subStyle" property.
-    - Identify answers at the lowest level of the hierarchy (leaf nodes).
-    - Some questions or answers in the exam structure may include images (provided as base64 data in 'questionImage' or 'answerImage' fields). Use these images to understand the context of the question and the expected answer.
-    4. Compare the student's answer with the model answer.
-    5. Assign a grade for each question/sub-question based on accuracy. Be fair but strict as a teacher.
-    6. Provide brief feedback for each answer.
-    7. Calculate the total grade.
-    
-    CHOICE LOGIC (IMPORTANT):
-    - Some exams allow students to skip questions (e.g., "Answer 5 out of 6").
-    - If a student answers MORE than the required number of questions, you MUST ignore the LAST question(s) in the sequence. For example, if 5 are required and 6 are answered, ignore question 6.
-    - If a question has sub-questions and the student answers MORE than the "requiredSubCount", you MUST ignore the LAST sub-question(s) in that question.
-    - Mark ignored questions/sub-questions with a grade of 0 and state in the feedback: "تم تجاهل هذا السؤال/الفرع لأنه زائد عن العدد المطلوب (قاعدة ترك الأخير)".
-    - Calculate the "totalGrade" based only on the required number of questions/sub-questions (excluding the ignored ones).
-    
-    OUTPUT FORMAT (JSON ONLY):
-    {
-      "results": [
-        {
-          "studentName": "Name",
-          "gradings": [
-            {
-              "questionId": "id", // Use the original ID from the questions list, even for sub-questions
-              "studentAnswer": "extracted text",
-              "grade": number,
-              "feedback": "feedback text"
-            }
-          ],
-          "totalGrade": number
-        }
-      ]
+    const prompt = `
+      You are an expert teacher grading student handwritten exam papers.
+      
+      EXAM QUESTIONS AND MODEL ANSWERS:
+      ${JSON.stringify(questions, null, 2)}
+      
+      TOTAL EXAM GRADE: ${totalExamGrade}
+      REQUIRED QUESTIONS COUNT: ${requiredQuestionsCount}
+      
+      INSTRUCTIONS:
+      1. Analyze the provided images (Batch ${Math.floor(i/BATCH_SIZE) + 1}).
+      2. Each student's paper might span one or more images. 
+      3. Extract the student's name. If an image is a continuation of the previous student, group them.
+      4. Grade each question accurately.
+      
+      OUTPUT FORMAT (JSON ONLY):
+      {
+        "results": [
+          {
+            "studentName": "Name",
+            "gradings": [
+              { "questionId": "id", "studentAnswer": "text", "grade": number, "feedback": "text" }
+            ],
+            "totalGrade": number
+          }
+        ]
+      }
+    `;
+
+    const imageParts = batch.map((base64) => ({
+      inlineData: {
+        data: base64,
+        mimeType: "image/jpeg",
+      },
+    }));
+
+    const result = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [{ role: "user", parts: [...imageParts, { text: prompt }] }],
+      config: {
+        responseMimeType: "application/json",
+      },
+    });
+
+    const parsed = JSON.parse(result.text || '{"results":[]}');
+    if (parsed.results) {
+      allResults.push(...parsed.results);
     }
-    
-    IMPORTANT: If a question has sub-questions, grade each sub-question individually and include them in the "gradings" array using their respective IDs.
-  `;
+  }
 
-  const imageParts = base64Images.map((base64) => ({
-    inlineData: {
-      data: base64,
-      mimeType: "image/jpeg",
-    },
-  }));
-
-  const result = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: [{ role: "user", parts: [...imageParts, { text: prompt }] }],
-    config: {
-      responseMimeType: "application/json",
-    },
-  });
-
-  return JSON.parse(result.text || '{}');
+  return { results: allResults };
 }

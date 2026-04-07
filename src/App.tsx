@@ -1185,6 +1185,7 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
   const [images, setImages] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [isGrading, setIsGrading] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [gradingResults, setGradingResults] = useState<any[]>([]);
   const [currentResultIndex, setCurrentResultIndex] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1202,8 +1203,15 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
   const startGrading = async () => {
     if (images.length === 0) return alert('يرجى رفع صور أوراق الطلاب');
     setIsGrading(true);
+    setProgress({ current: 0, total: images.length });
     try {
-      const { results } = await gradeStudentPaper(previews, exam.questions, exam.totalGrade, exam.requiredQuestionsCount);
+      const { results } = await gradeStudentPaper(
+        previews, 
+        exam.questions, 
+        exam.totalGrade, 
+        exam.requiredQuestionsCount,
+        (current, total) => setProgress({ current, total })
+      );
       setGradingResults(results);
       setCurrentResultIndex(0);
     } catch (e) {
@@ -1211,6 +1219,7 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
       alert('حدث خطأ أثناء التصحيح التلقائي');
     } finally {
       setIsGrading(false);
+      setProgress({ current: 0, total: 0 });
     }
   };
 
@@ -1323,7 +1332,9 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
               className="px-8 py-3 rounded-2xl bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
             >
               {isGrading ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
-              بدء التصحيح الذكي
+              {isGrading && progress.total > 0 
+                ? `جاري المعالجة (${progress.current}/${progress.total})...` 
+                : 'بدء التصحيح الذكي'}
             </button>
           </div>
         </div>
