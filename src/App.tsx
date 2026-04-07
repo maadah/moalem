@@ -1177,7 +1177,9 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
       // 2. Save each result with the sessionId
       for (const result of gradingResults) {
         await addDoc(collection(db, 'results'), {
-          ...result,
+          studentName: result.studentName,
+          gradings: result.gradings,
+          totalGrade: result.totalGrade,
           sessionId: sessionRef.id,
           examId: exam.id,
           examTitle: exam.title,
@@ -1277,7 +1279,7 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
             </div>
 
             <div className="space-y-4">
-              {currentGrading.gradings.map((g: any, i: number) => {
+              {currentGrading.gradings?.map((g: any, i: number) => {
                 // Find question or sub-question (3 levels)
                 let question: any = null;
                 exam.questions.forEach((q: any) => {
@@ -1481,7 +1483,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
           </div>
 
           <div className="space-y-4">
-            {selectedResult.gradings.map((g: any, i: number) => {
+            {selectedResult.gradings?.map((g: any, i: number) => {
               let question: any = null;
               if (exam) {
                 exam.questions.forEach((q: any) => {
