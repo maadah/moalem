@@ -12,12 +12,16 @@ const firebaseConfig = {
   firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID || "ai-studio-82f79215-9e3a-468e-971e-079777ac98c8"
 };
 
+// Debugging helper to detect swapped keys
+if (firebaseConfig.apiKey.startsWith('AIzaSyCm')) {
+  console.error("CRITICAL: It looks like you put your Gemini API Key in the VITE_FIREBASE_API_KEY field. Please use the Firebase API Key (starting with AIzaSyC1) instead.");
+}
+
 let app;
 try {
   app = initializeApp(firebaseConfig);
 } catch (error) {
   console.error("Firebase initialization error:", error);
-  // Fallback to avoid complete crash
   app = initializeApp({ apiKey: "invalid" });
 }
 
