@@ -4,7 +4,7 @@ import {
   XCircle, ChevronDown, ChevronUp, Download, LogIn, 
   LogOut, Loader2, FileUp, List, Settings, User,
   HelpCircle, CheckSquare, Type, LayoutGrid, Image as ImageIcon,
-  ArrowRight, Calendar, Folder, FolderOpen, Users
+  ArrowRight, Calendar, Folder, FolderOpen, Users, Camera
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -211,6 +211,7 @@ function ImageUpload({
   compact?: boolean
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -246,12 +247,22 @@ function ImageUpload({
             className={cn("object-cover rounded-lg border border-stone-200", compact ? "w-10 h-10" : "w-full h-24")}
             referrerPolicy="no-referrer"
           />
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center rounded-lg"
-          >
-            <ImageIcon className={cn("text-white", compact ? "w-3 h-3" : "w-5 h-5")} />
-          </button>
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center gap-2 rounded-lg">
+            <button 
+              onClick={() => fileInputRef.current?.click()}
+              className="p-1.5 bg-white/20 hover:bg-white/40 rounded-lg transition-colors"
+              title="تغيير من الجهاز"
+            >
+              <ImageIcon className={cn("text-white", compact ? "w-3 h-3" : "w-5 h-5")} />
+            </button>
+            <button 
+              onClick={() => cameraInputRef.current?.click()}
+              className="p-1.5 bg-white/20 hover:bg-white/40 rounded-lg transition-colors"
+              title="تغيير من الكاميرا"
+            >
+              <Camera className={cn("text-white", compact ? "w-3 h-3" : "w-5 h-5")} />
+            </button>
+          </div>
           {compact && (
             <button 
               onClick={onRemove}
@@ -262,23 +273,44 @@ function ImageUpload({
           )}
         </div>
       ) : (
-        <button 
-          onClick={() => fileInputRef.current?.click()}
-          className={cn(
-            "border-2 border-dashed border-stone-200 rounded-lg flex items-center justify-center gap-2 text-stone-400 hover:border-emerald-500 hover:text-emerald-500 transition-all",
-            compact ? "w-10 h-10" : "w-full h-10"
-          )}
-          title={label}
-        >
-          <ImageIcon className={cn(compact ? "w-3 h-3" : "w-4 h-4")} />
-          {!compact && <span className="text-[10px]">إضافة صورة</span>}
-        </button>
+        <div className={cn("flex gap-2", compact ? "flex-col" : "flex-row")}>
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className={cn(
+              "border-2 border-dashed border-stone-200 rounded-lg flex items-center justify-center gap-2 text-stone-400 hover:border-emerald-500 hover:text-emerald-500 transition-all",
+              compact ? "w-10 h-10" : "flex-1 h-10"
+            )}
+            title="رفع من الجهاز"
+          >
+            <ImageIcon className={cn(compact ? "w-3 h-3" : "w-4 h-4")} />
+            {!compact && <span className="text-[10px]">الجهاز</span>}
+          </button>
+          <button 
+            onClick={() => cameraInputRef.current?.click()}
+            className={cn(
+              "border-2 border-dashed border-stone-200 rounded-lg flex items-center justify-center gap-2 text-stone-400 hover:border-emerald-500 hover:text-emerald-500 transition-all",
+              compact ? "w-10 h-10" : "flex-1 h-10"
+            )}
+            title="فتح الكاميرا"
+          >
+            <Camera className={cn(compact ? "w-3 h-3" : "w-4 h-4")} />
+            {!compact && <span className="text-[10px]">الكاميرا</span>}
+          </button>
+        </div>
       )}
       <input 
         type="file" 
         ref={fileInputRef} 
         onChange={handleFileChange} 
         accept="image/*" 
+        className="hidden" 
+      />
+      <input 
+        type="file" 
+        ref={cameraInputRef} 
+        onChange={handleFileChange} 
+        accept="image/*" 
+        capture="environment"
         className="hidden" 
       />
     </div>
@@ -378,6 +410,7 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractionImages, setExtractionImages] = useState<string[]>([]);
   const extractionInputRef = useRef<HTMLInputElement>(null);
+  const extractionCameraInputRef = useRef<HTMLInputElement>(null);
   const examPrintRef = useRef<HTMLDivElement>(null);
 
   const uploadImageToStorage = async (base64: string, path: string) => {
@@ -660,9 +693,18 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
           <button 
             onClick={() => extractionInputRef.current?.click()}
             className="px-6 py-2 rounded-xl bg-stone-100 text-stone-900 flex items-center gap-2 hover:bg-stone-200 transition-all"
+            title="رفع من الجهاز"
           >
             <FileUp className="w-4 h-4" />
             استخراج من صور
+          </button>
+          <button 
+            onClick={() => extractionCameraInputRef.current?.click()}
+            className="px-6 py-2 rounded-xl bg-stone-100 text-stone-900 flex items-center gap-2 hover:bg-stone-200 transition-all"
+            title="فتح الكاميرا"
+          >
+            <Camera className="w-4 h-4" />
+            فتح الكاميرا
           </button>
           <input 
             type="file" 
@@ -670,6 +712,14 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
             onChange={handleExtractionFileChange} 
             accept="image/*" 
             multiple 
+            className="hidden" 
+          />
+          <input 
+            type="file" 
+            ref={extractionCameraInputRef} 
+            onChange={handleExtractionFileChange} 
+            accept="image/*" 
+            capture="environment"
             className="hidden" 
           />
           <button onClick={onCancel} className="px-6 py-2 rounded-xl text-stone-500 hover:bg-stone-100 transition-colors">إلغاء</button>
@@ -1138,6 +1188,7 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
   const [gradingResults, setGradingResults] = useState<any[]>([]);
   const [currentResultIndex, setCurrentResultIndex] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -1227,6 +1278,14 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
             ref={fileInputRef} 
             onChange={handleFileChange}
           />
+          <input 
+            type="file" 
+            accept="image/*" 
+            capture="environment"
+            className="hidden" 
+            ref={cameraInputRef} 
+            onChange={handleFileChange}
+          />
           <div className="flex flex-wrap gap-4 justify-center">
             {previews.map((url, i) => (
               <div key={i} className="relative w-24 h-32 rounded-lg overflow-hidden border border-stone-200 group">
@@ -1246,9 +1305,17 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
           <div className="flex justify-center gap-4">
             <button 
               onClick={() => fileInputRef.current?.click()}
-              className="px-8 py-3 rounded-2xl border border-stone-200 font-medium hover:bg-stone-50 transition-colors"
+              className="px-8 py-3 rounded-2xl border border-stone-200 font-medium hover:bg-stone-50 transition-colors flex items-center gap-2"
             >
+              <Upload className="w-4 h-4" />
               اختيار الصور
+            </button>
+            <button 
+              onClick={() => cameraInputRef.current?.click()}
+              className="px-8 py-3 rounded-2xl border border-stone-200 font-medium hover:bg-stone-50 transition-colors flex items-center gap-2"
+            >
+              <Camera className="w-4 h-4" />
+              فتح الكاميرا
             </button>
             <button 
               onClick={startGrading}
