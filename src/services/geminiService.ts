@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 export interface Question {
   id: string;
@@ -103,17 +103,39 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     contents: { parts: [...imageParts, { text: prompt }] },
     config: {
       responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING },
+          requiredQuestionsCount: { type: Type.NUMBER },
+          questions: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                text: { type: Type.STRING },
+                answer: { type: Type.STRING },
+                grade: { type: Type.NUMBER },
+                type: { type: Type.STRING },
+                options: { type: Type.ARRAY, items: { type: Type.STRING } },
+                subStyle: { type: Type.STRING },
+                requiredSubCount: { type: Type.NUMBER }
+              }
+            }
+          }
+        }
+      }
     }
   });
 
   const text = response.text || '';
   try {
-    // Clean potential markdown wrapping
+    return JSON.parse(text);
+  } catch (e) {
+    // Fallback cleaning
     const jsonStr = text.replace(/```json\n?|```/g, '').trim();
     return JSON.parse(jsonStr);
-  } catch (e) {
-    console.error("Failed to parse JSON from AI response:", text);
-    throw new Error("فشل في تحليل استجابة الذكاء الاصطناعي.");
   }
 }
 
@@ -195,8 +217,37 @@ export async function gradeStudentPaper(
   
   // If we have many images, we should process them in smaller batches to avoid hitting payload limits
   // and to prevent the browser from hanging.
-  const BATCH_SIZE = 3; // Reduced batch size for better reliability
+  const BATCH_SIZE = 2; // Further reduced for maximum reliability with 24+ images
   const allResults: any[] = [];
+
+  // Schema for grading results
+  const gradingSchema = {
+    type: Type.OBJECT,
+    properties: {
+      results: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            studentName: { type: Type.STRING },
+            gradings: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  questionId: { type: Type.STRING },
+                  studentAnswer: { type: Type.STRING },
+                  grade: { type: Type.NUMBER },
+                  feedback: { type: Type.STRING }
+                }
+              }
+            },
+            totalGrade: { type: Type.NUMBER }
+          }
+        }
+      }
+    }
+  };
 
   for (let i = 0; i < base64Images.length; i += BATCH_SIZE) {
     const batch = base64Images.slice(i, i + BATCH_SIZE);
@@ -217,19 +268,7 @@ export async function gradeStudentPaper(
       4. Grade each question accurately based on the model answers.
       5. Provide constructive feedback for each answer.
       6. Calculate the total grade for the student.
-      
-      OUTPUT FORMAT (JSON ONLY):
-      {
-        "results": [
-          {
-            "studentName": "Name",
-            "gradings": [
-              { "questionId": "id", "studentAnswer": "text", "grade": number, "feedback": "text" }
-            ],
-            "totalGrade": number
-          }
-        ]
-      }
+      7. **CRITICAL**: Ensure all strings are properly escaped for JSON. Do not include unescaped newlines or control characters.
     `;
 
     const imageParts = batch.map((base64) => ({
@@ -241,27 +280,42 @@ export async function gradeStudentPaper(
 
     try {
       const result = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview", // Upgraded to Pro for better handwritten text analysis
+        model: "gemini-3.1-pro-preview",
         contents: [{ role: "user", parts: [...imageParts, { text: prompt }] }],
         config: {
           responseMimeType: "application/json",
+          responseSchema: gradingSchema
         },
       });
 
       const text = result.text || '';
-      const jsonStr = text.replace(/```json\n?|```/g, '').trim();
-      const parsed = JSON.parse(jsonStr || '{"results":[]}');
+      
+      // Robust JSON parsing with cleaning
+      let parsed;
+      try {
+        parsed = JSON.parse(text);
+      } catch (innerError) {
+        // Clean common JSON issues: unescaped control characters
+        const cleaned = text
+          .replace(/[\u0000-\u001F\u007F-\u009F]/g, "") // Remove control characters
+          .replace(/```json\n?|```/g, "") // Remove markdown
+          .trim();
+        parsed = JSON.parse(cleaned);
+      }
       
       if (parsed.results && Array.isArray(parsed.results)) {
         allResults.push(...parsed.results);
       }
     } catch (e: any) {
       console.error(`Error in grading batch ${i}:`, e);
-      // If it's a quota error or something similar, we should stop and inform the user
       if (e.message?.includes('429') || e.message?.includes('quota')) {
         throw new Error("تم تجاوز حصة استخدام API (Quota Exceeded). يرجى المحاولة لاحقاً.");
       }
-      // For other errors, we might want to continue or throw
+      // If we already have some results, we might want to return them instead of failing completely
+      if (allResults.length > 0) {
+        console.warn("Returning partial results due to error in batch.");
+        break; 
+      }
       throw new Error(`خطأ في معالجة الصور: ${e.message || 'خطأ غير معروف'}`);
     }
   }
