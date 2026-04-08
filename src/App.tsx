@@ -1,4 +1,4 @@
-// Smart Grader - AI Powered Exam System
+// Smart Grader - AI Powered Exam System (Netlify Optimized)
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, Trash2, Save, FileText, Upload, CheckCircle, 
