@@ -1,3 +1,4 @@
+// Smart Grader - AI Powered Exam System
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, Trash2, Save, FileText, Upload, CheckCircle, 
