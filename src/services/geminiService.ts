@@ -217,7 +217,7 @@ export async function gradeStudentPaper(
   
   // If we have many images, we should process them in smaller batches to avoid hitting payload limits
   // and to prevent the browser from hanging.
-  const BATCH_SIZE = 2; // Further reduced for maximum reliability with 24+ images
+  const BATCH_SIZE = 4; // Increased for speed, Flash can handle more context
   const allResults: any[] = [];
 
   // Schema for grading results
@@ -266,7 +266,7 @@ export async function gradeStudentPaper(
       2. Each student's paper might span one or more images. 
       3. Extract the student's name. If an image is a continuation of the previous student, group them.
       4. Grade each question accurately based on the model answers.
-      5. Provide constructive feedback for each answer.
+      5. **CONCISE FEEDBACK**: Provide very short, constructive feedback (max 15 words per question). Do not repeat the question or model answer.
       6. Calculate the total grade for the student.
       7. **CRITICAL**: Ensure all strings are properly escaped for JSON. Do not include unescaped newlines or control characters.
     `;
@@ -280,7 +280,7 @@ export async function gradeStudentPaper(
 
     try {
       const result = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
+        model: "gemini-3-flash-preview", // Switched to Flash for speed and stability
         contents: [{ role: "user", parts: [...imageParts, { text: prompt }] }],
         config: {
           responseMimeType: "application/json",
@@ -290,17 +290,30 @@ export async function gradeStudentPaper(
 
       const text = result.text || '';
       
-      // Robust JSON parsing with cleaning
+      // Robust JSON parsing with cleaning and truncation repair
       let parsed;
       try {
         parsed = JSON.parse(text);
       } catch (innerError) {
-        // Clean common JSON issues: unescaped control characters
-        const cleaned = text
-          .replace(/[\u0000-\u001F\u007F-\u009F]/g, "") // Remove control characters
-          .replace(/```json\n?|```/g, "") // Remove markdown
+        let cleaned = text
+          .replace(/[\u0000-\u001F\u007F-\u009F]/g, "") 
+          .replace(/```json\n?|```/g, "")
           .trim();
-        parsed = JSON.parse(cleaned);
+        
+        // Attempt to repair truncated JSON by closing arrays/objects
+        if (!cleaned.endsWith('}')) {
+          if (cleaned.includes('"results": [')) {
+            if (!cleaned.endsWith(']')) cleaned += ' ]';
+            cleaned += ' }';
+          }
+        }
+        
+        try {
+          parsed = JSON.parse(cleaned);
+        } catch (e2) {
+          console.error("Final JSON parse failed even after repair attempt.");
+          throw innerError;
+        }
       }
       
       if (parsed.results && Array.isArray(parsed.results)) {
