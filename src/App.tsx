@@ -75,8 +75,18 @@ export default function App() {
   }, [user]);
 
   const login = async () => {
-    const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+    try {
+      const provider = new GoogleAuthProvider();
+      // Ensure we use popup for better compatibility with iframes
+      await signInWithPopup(auth, provider);
+    } catch (error: any) {
+      console.error("Login error:", error);
+      if (error.code === 'auth/unauthorized-domain') {
+        alert("خطأ: هذا النطاق غير مصرح به في إعدادات Firebase. يرجى التأكد من إضافة رابط المعاينة الحالي في Firebase Console > Authentication > Settings > Authorized domains.");
+      } else {
+        alert("حدث خطأ أثناء تسجيل الدخول: " + error.message);
+      }
+    }
   };
 
   const logout = () => signOut(auth);
