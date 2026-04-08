@@ -22,7 +22,7 @@ export interface GradingResult {
 }
 
 const getApiKey = () => {
-  // 1. Check URL parameters
+  // 1. Check URL parameters (e.g., ?key=...)
   const urlParams = new URLSearchParams(window.location.search);
   const urlKey = urlParams.get('key');
   if (urlKey) {

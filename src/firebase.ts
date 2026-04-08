@@ -14,7 +14,7 @@ const firebaseConfig = {
 
 // Diagnostic logging (Safe for production as it only shows prefixes)
 if (firebaseConfig.apiKey) {
-  console.log(`[Firebase Config Check] API Key is present.`);
+  console.log(`[Firebase Config Check] Using API Key starting with: ${firebaseConfig.apiKey.substring(0, 8)}...`);
 } else {
   console.warn("[Firebase Config Check] No API Key found in environment variables.");
 }
