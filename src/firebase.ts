@@ -14,11 +14,7 @@ const firebaseConfig = {
 
 // Diagnostic logging (Safe for production as it only shows prefixes)
 if (firebaseConfig.apiKey) {
-  console.log(`[Firebase Config Check] Using API Key starting with: ${firebaseConfig.apiKey.substring(0, 8)}...`);
-  
-  if (firebaseConfig.apiKey.startsWith('AIzaSyCm')) {
-    console.error("CRITICAL: Gemini Key detected in Firebase field! Use the key starting with AIzaSyC1 instead.");
-  }
+  console.log(`[Firebase Config Check] API Key is present.`);
 } else {
   console.warn("[Firebase Config Check] No API Key found in environment variables.");
 }
