@@ -1223,11 +1223,14 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
         exam.requiredQuestionsCount,
         (current, total) => setProgress({ current, total })
       );
+      if (!results || results.length === 0) {
+        throw new Error("لم يتم العثور على نتائج في الأوراق المرفوعة. تأكد من وضوح الصور وجودة الخط.");
+      }
       setGradingResults(results);
       setCurrentResultIndex(0);
-    } catch (e) {
-      console.error(e);
-      alert('حدث خطأ أثناء التصحيح التلقائي');
+    } catch (e: any) {
+      console.error("Grading error:", e);
+      alert(`عذراً، حدث خطأ أثناء التصحيح: ${e.message || 'خطأ غير معروف'}`);
     } finally {
       setIsGrading(false);
       setProgress({ current: 0, total: 0 });

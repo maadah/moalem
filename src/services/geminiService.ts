@@ -34,7 +34,9 @@ const getApiKey = () => {
 
   // 2. Check Netlify/Environment Variable (Vite bakes these at build time)
   // Check both import.meta.env and process.env for maximum compatibility
-  const envKey = import.meta.env.VITE_GEMINI_API_KEY || (typeof process !== 'undefined' ? process.env.VITE_GEMINI_API_KEY : '');
+  const envKey = import.meta.env.VITE_GEMINI_API_KEY || 
+                 (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '') ||
+                 (typeof process !== 'undefined' ? process.env.VITE_GEMINI_API_KEY : '');
   
   if (envKey && envKey !== 'undefined' && envKey !== 'null' && envKey !== '') {
     return envKey;
@@ -104,7 +106,15 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     }
   });
 
-  return JSON.parse(response.text);
+  const text = response.text || '';
+  try {
+    // Clean potential markdown wrapping
+    const jsonStr = text.replace(/```json\n?|```/g, '').trim();
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    console.error("Failed to parse JSON from AI response:", text);
+    throw new Error("فشل في تحليل استجابة الذكاء الاصطناعي.");
+  }
 }
 
 async function compressImage(url: string, maxWidth = 1600, maxHeight = 1600, quality = 0.7): Promise<string> {
@@ -178,14 +188,14 @@ export async function gradeStudentPaper(
   // 2. Fallback to Client-side
   const apiKey = getApiKey();
   if (!apiKey) {
-    throw new Error("مفتاح API مفقود.");
+    throw new Error("مفتاح API مفقود. يرجى التأكد من إعداد GEMINI_API_KEY في متغيرات البيئة.");
   }
 
   const ai = new GoogleGenAI({ apiKey });
   
   // If we have many images, we should process them in smaller batches to avoid hitting payload limits
   // and to prevent the browser from hanging.
-  const BATCH_SIZE = 5;
+  const BATCH_SIZE = 3; // Reduced batch size for better reliability
   const allResults: any[] = [];
 
   for (let i = 0; i < base64Images.length; i += BATCH_SIZE) {
@@ -201,10 +211,12 @@ export async function gradeStudentPaper(
       REQUIRED QUESTIONS COUNT: ${requiredQuestionsCount}
       
       INSTRUCTIONS:
-      1. Analyze the provided images (Batch ${Math.floor(i/BATCH_SIZE) + 1}).
+      1. Analyze the provided images (Batch ${Math.floor(i/BATCH_SIZE) + 1} of ${Math.ceil(base64Images.length / BATCH_SIZE)}).
       2. Each student's paper might span one or more images. 
       3. Extract the student's name. If an image is a continuation of the previous student, group them.
-      4. Grade each question accurately.
+      4. Grade each question accurately based on the model answers.
+      5. Provide constructive feedback for each answer.
+      6. Calculate the total grade for the student.
       
       OUTPUT FORMAT (JSON ONLY):
       {
@@ -227,17 +239,30 @@ export async function gradeStudentPaper(
       },
     }));
 
-    const result = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: [{ role: "user", parts: [...imageParts, { text: prompt }] }],
-      config: {
-        responseMimeType: "application/json",
-      },
-    });
+    try {
+      const result = await ai.models.generateContent({
+        model: "gemini-3.1-pro-preview", // Upgraded to Pro for better handwritten text analysis
+        contents: [{ role: "user", parts: [...imageParts, { text: prompt }] }],
+        config: {
+          responseMimeType: "application/json",
+        },
+      });
 
-    const parsed = JSON.parse(result.text || '{"results":[]}');
-    if (parsed.results) {
-      allResults.push(...parsed.results);
+      const text = result.text || '';
+      const jsonStr = text.replace(/```json\n?|```/g, '').trim();
+      const parsed = JSON.parse(jsonStr || '{"results":[]}');
+      
+      if (parsed.results && Array.isArray(parsed.results)) {
+        allResults.push(...parsed.results);
+      }
+    } catch (e: any) {
+      console.error(`Error in grading batch ${i}:`, e);
+      // If it's a quota error or something similar, we should stop and inform the user
+      if (e.message?.includes('429') || e.message?.includes('quota')) {
+        throw new Error("تم تجاوز حصة استخدام API (Quota Exceeded). يرجى المحاولة لاحقاً.");
+      }
+      // For other errors, we might want to continue or throw
+      throw new Error(`خطأ في معالجة الصور: ${e.message || 'خطأ غير معروف'}`);
     }
   }
 
