@@ -51,6 +51,9 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
   const prompt = `
     Analyze the provided images of an exam paper and extract the questions and answers into a structured JSON format.
     
+    LANGUAGE RULE:
+    - All extracted text (title, questions, answers) MUST be in Arabic if the source is Arabic.
+    
     HIERARCHY RULES:
     1. Level 1: Main Questions (e.g., Q1, Q2, S1, S2).
     2. Level 2: Branches (e.g., a, b, c or أ، ب، ج).
@@ -255,7 +258,7 @@ export async function gradeStudentPaper(
     const prompt = `
       You are an expert teacher grading student handwritten exam papers.
       
-      EXAM QUESTIONS AND MODEL ANSWERS:
+      EXAM QUESTIONS AND MODEL ANSWERS (Use these IDs exactly):
       ${JSON.stringify(questions, null, 2)}
       
       TOTAL EXAM GRADE: ${totalExamGrade}
@@ -266,9 +269,11 @@ export async function gradeStudentPaper(
       2. Each student's paper might span one or more images. 
       3. Extract the student's name. If an image is a continuation of the previous student, group them.
       4. Grade each question accurately based on the model answers.
-      5. **CONCISE FEEDBACK**: Provide very short, constructive feedback (max 15 words per question). Do not repeat the question or model answer.
-      6. Calculate the total grade for the student.
-      7. **CRITICAL**: Ensure all strings are properly escaped for JSON. Do not include unescaped newlines or control characters.
+      5. **MATCH IDs**: You MUST use the exact "id" from the EXAM QUESTIONS provided above for each grading result.
+      6. **ARABIC FEEDBACK ONLY**: You MUST provide all feedback and student names in Arabic language only.
+      7. **CONCISE FEEDBACK**: Provide very short, constructive feedback (max 15 words per question). Do not repeat the question or model answer.
+      8. Calculate the total grade for the student.
+      9. **CRITICAL**: Ensure all strings are properly escaped for JSON. Do not include unescaped newlines or control characters.
     `;
 
     const imageParts = batch.map((base64) => ({
@@ -283,6 +288,7 @@ export async function gradeStudentPaper(
         model: "gemini-3-flash-preview", // Switched to Flash for speed and stability
         contents: [{ role: "user", parts: [...imageParts, { text: prompt }] }],
         config: {
+          systemInstruction: "You are a professional Arabic teacher. All your feedback and communication must be in Arabic.",
           responseMimeType: "application/json",
           responseSchema: gradingSchema
         },
