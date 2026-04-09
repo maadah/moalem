@@ -282,11 +282,12 @@ export async function gradeStudentPaper(
       2. Each student's paper might span one or more images. 
       3. Extract the student's name. If an image is a continuation of the previous student, group them.
       4. Grade each question accurately based on the model answers.
-      5. **MATCH IDs**: You MUST use the exact "id" from the EXAM QUESTIONS provided above for each grading result.
-      6. **ARABIC FEEDBACK ONLY**: You MUST provide all feedback and student names in Arabic language only.
-      7. **CONCISE FEEDBACK**: Provide very short, constructive feedback (max 15 words per question). Do not repeat the question or model answer.
-      8. Calculate the total grade for the student.
-      9. **CRITICAL**: Ensure all strings are properly escaped for JSON. Do not include unescaped newlines or control characters.
+      5. **STUDENT ANSWER EXTRACTION**: You MUST extract the FULL text of the student's handwritten answer for each question and put it in the "studentAnswer" field. This must be a VERBATIM transcription of what the student wrote. Do not summarize, shorten, or paraphrase it. It is critical for the teacher to see exactly what the student wrote.
+      6. **MATCH IDs**: You MUST use the exact "id" from the EXAM QUESTIONS provided above for each grading result.
+      7. **ARABIC FEEDBACK ONLY**: You MUST provide all feedback and student names in Arabic language only.
+      8. **CONCISE FEEDBACK**: Provide very short, constructive feedback (max 15 words per question). Do not repeat the question or model answer.
+      9. Calculate the total grade for the student.
+      10. **CRITICAL**: Ensure all strings are properly escaped for JSON. Do not include unescaped newlines or control characters.
     `;
 
     const imageParts = batch.map((base64) => ({
