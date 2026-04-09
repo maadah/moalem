@@ -280,7 +280,7 @@ export async function gradeStudentPaper(
       INSTRUCTIONS:
       1. Analyze the provided images (Batch ${currentBatchIndex} of ${totalBatches}).
       2. Each student's paper might span one or more images. 
-      3. Extract the student's name. If an image is a continuation of the previous student, group them.
+      3. Extract the student's name exactly as written. Do not add suffixes like "Part 1" or "Continuation". If an image is a continuation of the previous student, group them.
       4. Grade each question accurately based on the model answers.
       5. **STUDENT ANSWER EXTRACTION**: You MUST extract the FULL text of the student's handwritten answer for each question and put it in the "studentAnswer" field. This must be a VERBATIM transcription of what the student wrote. Do not summarize, shorten, or paraphrase it. It is critical for the teacher to see exactly what the student wrote.
       6. **MATCH IDs**: You MUST use the exact "id" from the EXAM QUESTIONS provided above for each grading result.
@@ -353,5 +353,42 @@ export async function gradeStudentPaper(
     }
   }
 
-  return { results: allResults };
+  // Merge results by student name to handle cases where a student's pages are split across batches
+  const mergedMap = new Map<string, any>();
+  
+  const normalizeName = (name: string) => {
+    return name
+      .trim()
+      .replace(/[أإآ]/g, 'ا')
+      .replace(/ة/g, 'ه')
+      .replace(/ى/g, 'ي')
+      .replace(/\s+/g, ' ');
+  };
+
+  allResults.forEach(res => {
+    const normName = normalizeName(res.studentName);
+    if (mergedMap.has(normName)) {
+      const existing = mergedMap.get(normName);
+      
+      // Merge gradings
+      res.gradings.forEach((newG: any) => {
+        const existingIdx = existing.gradings.findIndex((eg: any) => eg.questionId === newG.questionId);
+        if (existingIdx > -1) {
+          // If duplicate question, keep the one with the higher grade
+          if ((newG.grade || 0) > (existing.gradings[existingIdx].grade || 0)) {
+            existing.gradings[existingIdx] = newG;
+          }
+        } else {
+          existing.gradings.push(newG);
+        }
+      });
+      
+      // Recalculate total grade based on merged gradings
+      existing.totalGrade = existing.gradings.reduce((sum: number, g: any) => sum + (g.grade || 0), 0);
+    } else {
+      mergedMap.set(normName, { ...res, gradings: [...res.gradings] });
+    }
+  });
+
+  return { results: Array.from(mergedMap.values()) };
 }
