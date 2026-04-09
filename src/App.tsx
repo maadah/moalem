@@ -1196,7 +1196,7 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
   const [images, setImages] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [isGrading, setIsGrading] = useState(false);
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [progress, setProgress] = useState({ current: 0, total: 0, phase: '' });
   const [gradingResults, setGradingResults] = useState<any[]>([]);
   const [currentResultIndex, setCurrentResultIndex] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1214,14 +1214,14 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
   const startGrading = async () => {
     if (images.length === 0) return alert('يرجى رفع صور أوراق الطلاب');
     setIsGrading(true);
-    setProgress({ current: 0, total: images.length });
+    setProgress({ current: 0, total: images.length, phase: 'compressing' });
     try {
       const { results } = await gradeStudentPaper(
         previews, 
         exam.questions, 
         exam.totalGrade, 
         exam.requiredQuestionsCount,
-        (current, total) => setProgress({ current, total })
+        (current, total, phase) => setProgress({ current, total, phase })
       );
       if (!results || results.length === 0) {
         throw new Error("لم يتم العثور على نتائج في الأوراق المرفوعة. تأكد من وضوح الصور وجودة الخط.");
@@ -1233,7 +1233,7 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
       alert(`عذراً، حدث خطأ أثناء التصحيح: ${e.message || 'خطأ غير معروف'}`);
     } finally {
       setIsGrading(false);
-      setProgress({ current: 0, total: 0 });
+      setProgress({ current: 0, total: 0, phase: '' });
     }
   };
 
@@ -1347,7 +1347,7 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
             >
               {isGrading ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
               {isGrading && progress.total > 0 
-                ? `جاري المعالجة (${progress.current}/${progress.total})...` 
+                ? `${progress.phase === 'compressing' ? 'جاري ضغط الصور' : 'جاري التصحيح'} (${progress.current}/${progress.total})...` 
                 : 'بدء التصحيح الذكي'}
             </button>
           </div>

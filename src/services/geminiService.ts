@@ -181,20 +181,29 @@ export async function gradeStudentPaper(
   questions: Question[],
   totalExamGrade: number,
   requiredQuestionsCount: number,
-  onProgress?: (current: number, total: number) => void
+  onProgress?: (current: number, total: number, phase: 'compressing' | 'grading') => void
 ): Promise<{ results: { studentName: string; gradings: GradingResult[]; totalGrade: number }[] }> {
   const totalImages = imageUrls.length;
   
-  // Convert and compress images
-  const base64Images = [];
-  for (let i = 0; i < imageUrls.length; i++) {
-    if (onProgress) onProgress(i + 1, totalImages);
+  // Parallelize image compression for speed
+  if (onProgress) onProgress(0, totalImages, 'compressing');
+  
+  const compressionPromises = imageUrls.map(async (url, index) => {
     try {
-      const compressed = await compressImage(imageUrls[i]);
-      base64Images.push(compressed);
+      const compressed = await compressImage(url);
+      if (onProgress) onProgress(index + 1, totalImages, 'compressing');
+      return compressed;
     } catch (e) {
-      console.error(`Error compressing image ${i}:`, e);
+      console.error(`Error compressing image ${index}:`, e);
+      return null;
     }
+  });
+
+  const compressedResults = await Promise.all(compressionPromises);
+  const base64Images = compressedResults.filter((img): img is string => img !== null);
+
+  if (base64Images.length === 0) {
+    throw new Error("فشل في معالجة الصور المرفوعة.");
   }
 
   // 1. Try Backend API first (Secure & Preferred)
@@ -218,9 +227,8 @@ export async function gradeStudentPaper(
 
   const ai = new GoogleGenAI({ apiKey });
   
-  // If we have many images, we should process them in smaller batches to avoid hitting payload limits
-  // and to prevent the browser from hanging.
-  const BATCH_SIZE = 4; // Increased for speed, Flash can handle more context
+  // Flash can handle large contexts. 10 images per batch is efficient and fast.
+  const BATCH_SIZE = 10; 
   const allResults: any[] = [];
 
   // Schema for grading results
@@ -252,7 +260,12 @@ export async function gradeStudentPaper(
     }
   };
 
+  const totalBatches = Math.ceil(base64Images.length / BATCH_SIZE);
+
   for (let i = 0; i < base64Images.length; i += BATCH_SIZE) {
+    const currentBatchIndex = Math.floor(i / BATCH_SIZE) + 1;
+    if (onProgress) onProgress(currentBatchIndex, totalBatches, 'grading');
+    
     const batch = base64Images.slice(i, i + BATCH_SIZE);
     
     const prompt = `
@@ -265,7 +278,7 @@ export async function gradeStudentPaper(
       REQUIRED QUESTIONS COUNT: ${requiredQuestionsCount}
       
       INSTRUCTIONS:
-      1. Analyze the provided images (Batch ${Math.floor(i/BATCH_SIZE) + 1} of ${Math.ceil(base64Images.length / BATCH_SIZE)}).
+      1. Analyze the provided images (Batch ${currentBatchIndex} of ${totalBatches}).
       2. Each student's paper might span one or more images. 
       3. Extract the student's name. If an image is a continuation of the previous student, group them.
       4. Grade each question accurately based on the model answers.
