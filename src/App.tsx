@@ -423,6 +423,7 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
   const [isSaving, setIsSaving] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [showPrintMenu, setShowPrintMenu] = useState(false);
   const [printMode, setPrintMode] = useState<'questions' | 'both'>('questions');
   const [extractionImages, setExtractionImages] = useState<string[]>([]);
   const extractionInputRef = useRef<HTMLInputElement>(null);
@@ -774,28 +775,45 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
           />
           <button onClick={onCancel} className="px-6 py-2 rounded-xl text-stone-500 hover:bg-stone-100 transition-colors">إلغاء</button>
           
-          <div className="relative group/print">
+          <div className="relative">
             <button 
+              onClick={() => setShowPrintMenu(!showPrintMenu)}
               disabled={isPrinting}
               className="px-6 py-2 rounded-xl bg-stone-900 text-white flex items-center gap-2 hover:bg-stone-800 disabled:opacity-50"
             >
               {isPrinting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
               تحميل PDF
+              <ChevronDown className={cn("w-4 h-4 transition-transform", showPrintMenu && "rotate-180")} />
             </button>
-            <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-stone-100 py-2 opacity-0 invisible group-hover/print:opacity-100 group-hover/print:visible transition-all z-50">
-              <button 
-                onClick={() => printExam('questions')}
-                className="w-full text-right px-4 py-2 text-sm hover:bg-stone-50 text-stone-700"
-              >
-                تحميل الأسئلة فقط
-              </button>
-              <button 
-                onClick={() => printExam('both')}
-                className="w-full text-right px-4 py-2 text-sm hover:bg-stone-50 text-stone-700 border-t border-stone-50"
-              >
-                تحميل الأسئلة والأجوبة
-              </button>
-            </div>
+            <AnimatePresence>
+              {showPrintMenu && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 10 }}
+                  className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-stone-100 py-2 z-50"
+                >
+                  <button 
+                    onClick={() => {
+                      printExam('questions');
+                      setShowPrintMenu(false);
+                    }}
+                    className="w-full text-right px-4 py-2 text-sm hover:bg-stone-50 text-stone-700"
+                  >
+                    تحميل الأسئلة فقط
+                  </button>
+                  <button 
+                    onClick={() => {
+                      printExam('both');
+                      setShowPrintMenu(false);
+                    }}
+                    className="w-full text-right px-4 py-2 text-sm hover:bg-stone-50 text-stone-700 border-t border-stone-50"
+                  >
+                    تحميل الأسئلة والأجوبة
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           <button 
