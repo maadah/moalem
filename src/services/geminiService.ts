@@ -52,38 +52,25 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     Analyze the provided images of an exam paper and extract the questions and answers into a structured JSON format.
     
     LANGUAGE RULE:
-    - All extracted text (title, questions, answers) MUST be in Arabic if the source is Arabic.
+    - All extracted text MUST be in Arabic if the source is Arabic.
     
     HIERARCHY RULES:
-    1. Level 1: Main Questions (e.g., Q1, Q2, S1, S2 or س1، س2).
+    1. Level 1: Main Questions (e.g., س1، س2).
     2. Level 2: Branches (e.g., A, B or أ، ب).
     3. Level 3: Points (e.g., 1, 2, 3).
     
     CRITICAL EXTRACTION LOGIC:
     - If a Question has Branches, the Question text is just a header (e.g., "Answer the following").
-    - If a Branch has Points, the Branch text is just a header (e.g., "Fill in the blanks").
-    - ONLY the leaf nodes (the deepest parts of the hierarchy) should definitely have an "answer" if found.
-    - Example 1: Q1 (no branches) -> Extract as Question with text and answer.
-    - Example 2: Q2 has Branch A and Branch B. Branch B has Points 1, 2, 3.
-      - Q2: text="Q2: Answer the following", subQuestions=[Branch A, Branch B]
-      - Branch A: text="A- Explain X", answer="...", subQuestions=[]
-      - Branch B: text="B- Fill in blanks", subQuestions=[Point 1, Point 2, Point 3]
-      - Point 1: text="1- ...", answer="..."
+    - If a Branch has Points, the Branch text is just a header.
+    - ONLY the leaf nodes should have an "answer" field.
+    - For scientific formulas (Chemistry/Physics), extract them exactly as written (e.g., H2SO4, CO2).
     
     EXTRACTION RULES:
-    - If a question has sub-parts (branches), put them in the "subQuestions" array.
-    - If a branch has sub-parts (points), put them in the "subQuestions" array of that branch.
-    - Extract the "text" for each question/branch/point.
-    - If the image contains model answers or student answers, extract them into the "answer" field.
-    - If no answers are found, leave the "answer" field empty.
-    - Assign a "grade" if mentioned in the image (e.g., "5 marks" or "5 درجات").
-    - Identify the "type" (text, true-false, multiple-choice, fill-in-the-blanks).
-    - For multiple-choice, extract the "options".
-    - Try to extract a logical "title" for the exam from the header.
-    - Generate a unique ID for each question/sub-question.
-    - **CRITICAL**: Detect choice logic (e.g., "Answer 2 out of 3" or "أجب عن اثنين مما يلي").
-      - For main questions, set "requiredQuestionsCount".
-      - For sub-questions/branches/points, set "requiredSubCount".
+    - Extract "text", "grade" (if mentioned), and "type".
+    - Detect choice logic (e.g., "Answer 5 questions only") and set "requiredQuestionsCount" or "requiredSubCount".
+    - Generate unique IDs.
+    - **BE CONCISE**: Do not add unnecessary explanations.
+    - **JSON SAFETY**: Ensure all quotes are escaped. Do not include unescaped newlines within strings.
     
     OUTPUT FORMAT (JSON ONLY):
     {
@@ -158,7 +145,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
   };
 
   const response = await ai.models.generateContent({
-    model: "gemini-3.1-pro-preview",
+    model: "gemini-1.5-flash", // Switched to Flash for speed as requested
     contents: { parts: [...imageParts, { text: prompt }] },
     config: {
       responseMimeType: "application/json",
@@ -177,12 +164,51 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
   });
 
   const text = response.text || '';
+  
+  // Robust JSON parsing with cleaning and truncation repair
   try {
     return JSON.parse(text);
-  } catch (e) {
-    // Fallback cleaning
-    const jsonStr = text.replace(/```json\n?|```/g, '').trim();
-    return JSON.parse(jsonStr);
+  } catch (innerError) {
+    let cleaned = text
+      .replace(/[\u0000-\u001F\u007F-\u009F]/g, "") // Remove control characters
+      .replace(/```json\n?|```/g, "")
+      .trim();
+    
+    // Attempt to repair truncated JSON by closing arrays/objects
+    // This is a basic heuristic to close open structures if the string was cut off
+    let openBraces = (cleaned.match(/\{/g) || []).length;
+    let closeBraces = (cleaned.match(/\}/g) || []).length;
+    let openBrackets = (cleaned.match(/\[/g) || []).length;
+    let closeBrackets = (cleaned.match(/\]/g) || []).length;
+
+    // If it's cut off inside a string, close the string first
+    if (cleaned.split('"').length % 2 === 0) {
+      cleaned += '"';
+    }
+
+    while (openBrackets > closeBrackets) {
+      cleaned += ']';
+      closeBrackets++;
+    }
+    while (openBraces > closeBraces) {
+      cleaned += '}';
+      closeBraces++;
+    }
+    
+    try {
+      return JSON.parse(cleaned);
+    } catch (e2) {
+      console.error("Final JSON parse failed even after repair attempt.", e2);
+      // If it still fails, try to find the last valid question and truncate there
+      try {
+        const lastValidIndex = cleaned.lastIndexOf('},');
+        if (lastValidIndex !== -1) {
+          const partial = cleaned.substring(0, lastValidIndex) + '}]}';
+          return JSON.parse(partial);
+        }
+      } catch (e3) {}
+      throw innerError;
+    }
   }
 }
 
