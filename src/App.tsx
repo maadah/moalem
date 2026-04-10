@@ -1600,7 +1600,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
           </button>
         </div>
 
-        <div ref={resultPrintRef} className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-8 pdf-export-container">
+        <div ref={resultPrintRef} className="bg-white p-8 border space-y-8 pdf-export-container">
           <div className="flex items-center justify-between border-b border-stone-100 pb-6">
             <div>
               <h3 className="text-2xl font-bold">الطالب: {selectedResult.studentName}</h3>
@@ -1719,7 +1719,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
         {/* Hidden area for printing all results */}
         <div className="fixed left-[-9999px] top-0 w-[210mm] pdf-export-container" ref={allResultsPrintRef}>
           {sessionResults.map((res: any) => (
-            <div key={res.id} className="bg-white p-10 mb-10 border-b-2 border-stone-200" style={{ pageBreakAfter: 'always' }}>
+            <div key={res.id} className="bg-white p-10 mb-10 border-b-2" style={{ pageBreakAfter: 'always' }}>
               <div className="flex items-center justify-between border-b border-stone-100 pb-6 mb-8">
                 <div>
                   <h3 className="text-3xl font-bold">نتيجة الطالب: {res.studentName}</h3>
