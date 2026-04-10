@@ -5,3 +5,36 @@
   --font-serif: "Amiri", serif;
   --font-sans: "Inter", sans-serif;
 }
+
+/* PDF Export Overrides to avoid oklch errors in html2canvas */
+.pdf-export-container, 
+.pdf-export-container * {
+  --tw-bg-opacity: 1 !important;
+  --tw-text-opacity: 1 !important;
+  --tw-border-opacity: 1 !important;
+  box-shadow: none !important;
+}
+
+.pdf-export-container .bg-white { background-color: #ffffff !important; }
+.pdf-export-container .bg-stone-50 { background-color: #fafaf9 !important; }
+.pdf-export-container .bg-stone-100 { background-color: #f5f5f4 !important; }
+.pdf-export-container .bg-emerald-50 { background-color: #ecfdf5 !important; }
+.pdf-export-container .bg-emerald-600 { background-color: #059669 !important; }
+
+.pdf-export-container {
+  font-family: "Inter", sans-serif !important;
+}
+
+.pdf-export-container .text-white { color: #ffffff !important; }
+.pdf-export-container .text-emerald-600 { color: #059669 !important; }
+.pdf-export-container .text-emerald-800 { color: #065f46 !important; }
+.pdf-export-container .text-stone-300 { color: #d6d3d1 !important; }
+.pdf-export-container .text-stone-400 { color: #a8a29e !important; }
+.pdf-export-container .text-stone-500 { color: #78716c !important; }
+.pdf-export-container .text-stone-600 { color: #57534e !important; }
+.pdf-export-container .text-stone-900 { color: #1c1917 !important; }
+
+.pdf-export-container .border-stone-100 { border-color: #f5f5f4 !important; }
+.pdf-export-container .border-stone-200 { border-color: #e7e5e4 !important; }
+.pdf-export-container .border-emerald-100 { border-color: #d1fae5 !important; }
+.pdf-export-container .border-b-2 { border-bottom-width: 2px !important; }
