@@ -52,7 +52,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     Analyze the provided images of an exam paper and extract the questions and answers into a structured JSON format.
     
     LANGUAGE RULE:
-    - All extracted text MUST be in Arabic if the source is Arabic.
+    - All extracted text MUST be in Arabic.
     
     HIERARCHY RULES:
     1. Level 1: Main Questions (e.g., س1، س2).
@@ -68,9 +68,10 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     EXTRACTION RULES:
     - Extract "text", "grade" (if mentioned), and "type".
     - Detect choice logic (e.g., "Answer 5 questions only") and set "requiredQuestionsCount" or "requiredSubCount".
-    - Generate unique IDs.
+    - Generate unique IDs for every single item.
     - **BE CONCISE**: Do not add unnecessary explanations.
     - **JSON SAFETY**: Ensure all quotes are escaped. Do not include unescaped newlines within strings.
+    - **MANDATORY**: You MUST extract ALL questions visible in the images. Do not skip any.
     
     OUTPUT FORMAT (JSON ONLY):
     {
@@ -102,6 +103,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
   // Define recursive schema for questions
   const questionSchema: any = {
     type: Type.OBJECT,
+    required: ["id", "text", "type"],
     properties: {
       id: { type: Type.STRING },
       text: { type: Type.STRING },
@@ -115,6 +117,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
         type: Type.ARRAY,
         items: {
           type: Type.OBJECT,
+          required: ["id", "text", "type"],
           properties: {
             id: { type: Type.STRING },
             text: { type: Type.STRING },
@@ -128,6 +131,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
               type: Type.ARRAY,
               items: {
                 type: Type.OBJECT,
+                required: ["id", "text", "type"],
                 properties: {
                   id: { type: Type.STRING },
                   text: { type: Type.STRING },
@@ -145,12 +149,14 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
   };
 
   const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview", // Correct model name for speed and stability
+    model: "gemini-3.1-pro-preview", // Use Pro for better complex extraction from dense images
     contents: { parts: [...imageParts, { text: prompt }] },
     config: {
+      systemInstruction: "You are a professional exam digitizer. Your task is to extract every single question, branch, and point from exam images into a precise JSON structure. Never skip content.",
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
+        required: ["questions"],
         properties: {
           title: { type: Type.STRING },
           requiredQuestionsCount: { type: Type.NUMBER },

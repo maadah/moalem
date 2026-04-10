@@ -492,11 +492,27 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
       }
 
       const result = await extractExamFromImages(extractionImages, apiKey);
+      console.log('Extraction result:', result);
+      
       if (result.title) setTitle(result.title);
-      if (result.questions) setQuestions(result.questions);
       if (result.requiredQuestionsCount) setRequiredQuestionsCount(result.requiredQuestionsCount);
+      
+      if (result.questions && result.questions.length > 0) {
+        // Ensure all questions have IDs
+        const ensureIds = (qs: Question[]): Question[] => {
+          return qs.map(q => ({
+            ...q,
+            id: q.id || Math.random().toString(36).substr(2, 9),
+            subQuestions: q.subQuestions ? ensureIds(q.subQuestions) : []
+          }));
+        };
+        setQuestions(ensureIds(result.questions));
+        alert('تم استخراج الأسئلة بنجاح');
+      } else {
+        alert('تمت المعالجة ولكن لم يتم العثور على أسئلة واضحة. يرجى التأكد من جودة الصورة.');
+      }
+      
       setExtractionImages([]);
-      alert('تم استخراج الأسئلة بنجاح');
     } catch (e) {
       console.error(e);
       alert('حدث خطأ أثناء استخراج الأسئلة');
