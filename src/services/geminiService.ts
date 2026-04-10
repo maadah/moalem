@@ -157,12 +157,11 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
   };
 
   const response = await ai.models.generateContent({
-    model: "gemini-3.1-pro-preview", 
+    model: "gemini-3-flash-preview", // Use Flash for faster, more concise responses to avoid truncation
     contents: { parts: [...imageParts, { text: prompt }] },
     config: {
-      systemInstruction: "You are a professional exam digitizer. Extract every question into a precise JSON structure. Ensure all strings are properly escaped for JSON. Use \n for newlines.",
+      systemInstruction: "You are a professional exam digitizer. Extract ALL questions into a precise JSON structure. Be concise to avoid long responses. Use \n for newlines.",
       responseMimeType: "application/json",
-      maxOutputTokens: 8192,
       responseSchema: {
         type: Type.OBJECT,
         required: ["questions"],
@@ -192,8 +191,15 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
     
     // Handle unescaped newlines within strings (common cause of SyntaxError)
-    // This regex looks for newlines that are NOT preceded by a backslash
-    cleaned = cleaned.replace(/(?<!\\)\n/g, "\\n");
+    // We only want to replace newlines that are NOT preceded by a backslash
+    // and are likely inside a JSON string value.
+    // A simpler approach for the repair is to remove control characters first.
+    cleaned = cleaned.replace(/[\u0000-\u001F\u007F-\u009F]/g, (match) => {
+      if (match === '\n') return '\\n';
+      if (match === '\r') return '\\r';
+      if (match === '\t') return '\\t';
+      return '';
+    });
 
     // Attempt to repair truncated JSON by closing arrays/objects
     let openBraces = (cleaned.match(/\{/g) || []).length;
@@ -202,20 +208,27 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     let closeBrackets = (cleaned.match(/\]/g) || []).length;
 
     // If it's cut off inside a string, close the string first
-    // We check if the number of double quotes is odd
     const quoteMatches = cleaned.match(/"/g);
     if (quoteMatches && quoteMatches.length % 2 !== 0) {
       cleaned += '"';
     }
 
-    // Close open structures
-    while (openBrackets > closeBrackets) {
-      cleaned += ']';
-      closeBrackets++;
-    }
-    while (openBraces > closeBraces) {
-      cleaned += '}';
-      closeBraces++;
+    // Close open structures in reverse order
+    // This is a bit tricky, but we'll try to balance them
+    while (openBrackets > closeBrackets || openBraces > closeBraces) {
+      // Find which one was opened last
+      const lastOpenBrace = cleaned.lastIndexOf('{');
+      const lastOpenBracket = cleaned.lastIndexOf('[');
+      
+      if (lastOpenBrace > lastOpenBracket && openBraces > closeBraces) {
+        cleaned += '}';
+        closeBraces++;
+      } else if (openBrackets > closeBrackets) {
+        cleaned += ']';
+        closeBrackets++;
+      } else {
+        break;
+      }
     }
     
     try {
@@ -233,6 +246,13 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
             // Ensure we close the array and the root object
             if (!partial.endsWith(']')) partial += ']';
             if (!partial.endsWith('}')) partial += '}';
+            // Count again to be sure
+            let pOpenBraces = (partial.match(/\{/g) || []).length;
+            let pCloseBraces = (partial.match(/\}/g) || []).length;
+            while (pOpenBraces > pCloseBraces) {
+              partial += '}';
+              pCloseBraces++;
+            }
             return JSON.parse(partial);
           }
         }
