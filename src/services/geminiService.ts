@@ -49,7 +49,12 @@ const getApiKey = () => {
 export async function extractExamFromImages(base64Images: string[], apiKey: string): Promise<{ title: string, questions: Question[], requiredQuestionsCount?: number }> {
   const ai = new GoogleGenAI({ apiKey });
   const prompt = `
-    Analyze the provided images of an exam paper and extract the questions and answers into a structured JSON format.
+    Analyze the provided images of an exam paper and extract EVERY SINGLE question, branch, and point into a structured JSON format.
+    
+    THINKING STEP:
+    Before generating the JSON, mentally list all the main questions you see (e.g., س1, س2, س3, س4, س5, س6). Ensure your JSON includes every single one of them.
+    
+    CRITICAL: This is a full exam paper. You MUST scan the entire image from top to bottom and extract all questions. Do not stop after the first question.
     
     LANGUAGE RULE:
     - All extracted text MUST be in Arabic.
@@ -60,7 +65,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     3. Level 3: Points (e.g., 1, 2, 3).
     
     CRITICAL EXTRACTION LOGIC:
-    - If a Question has Branches, the Question text is just a header (e.g., "Answer the following").
+    - If a Question has Branches, the Question text is just a header.
     - If a Branch has Points, the Branch text is just a header.
     - ONLY the leaf nodes should have an "answer" field.
     - For scientific formulas (Chemistry/Physics), extract them exactly as written (e.g., H2SO4, CO2).
@@ -69,9 +74,8 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     - Extract "text", "grade" (if mentioned), and "type".
     - Detect choice logic (e.g., "Answer 5 questions only") and set "requiredQuestionsCount" or "requiredSubCount".
     - Generate unique IDs for every single item.
-    - **BE CONCISE**: Do not add unnecessary explanations.
+    - **MANDATORY**: You MUST extract ALL questions visible in the images. Do not skip any. Scan the whole page.
     - **JSON SAFETY**: Ensure all quotes are escaped. Do not include unescaped newlines within strings.
-    - **MANDATORY**: You MUST extract ALL questions visible in the images. Do not skip any.
     
     OUTPUT FORMAT (JSON ONLY):
     {
@@ -93,11 +97,16 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     }
   `;
 
-  const imageParts = base64Images.map((base64) => ({
-    inlineData: {
-      data: base64.split(',')[1] || base64,
-      mimeType: "image/jpeg",
-    },
+  const imageParts = await Promise.all(base64Images.map(async (base64) => {
+    // Ensure we have a data URL for compressImage
+    const dataUrl = base64.startsWith('data:') ? base64 : `data:image/jpeg;base64,${base64}`;
+    const compressedData = await compressImage(dataUrl);
+    return {
+      inlineData: {
+        data: compressedData,
+        mimeType: "image/jpeg",
+      },
+    };
   }));
 
   // Define recursive schema for questions
@@ -154,10 +163,15 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     config: {
       systemInstruction: "You are a professional exam digitizer. Your task is to extract every single question, branch, and point from exam images into a precise JSON structure. Never skip content.",
       responseMimeType: "application/json",
+      maxOutputTokens: 8192,
       responseSchema: {
         type: Type.OBJECT,
-        required: ["questions"],
+        required: ["questions", "extraction_plan"],
         properties: {
+          extraction_plan: { 
+            type: Type.STRING, 
+            description: "A brief plan listing all questions found (e.g., 'Found س1, س2, س3, س4, س5, س6. Starting extraction...')" 
+          },
           title: { type: Type.STRING },
           requiredQuestionsCount: { type: Type.NUMBER },
           questions: {
@@ -218,7 +232,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
   }
 }
 
-async function compressImage(url: string, maxWidth = 1600, maxHeight = 1600, quality = 0.7): Promise<string> {
+async function compressImage(url: string, maxWidth = 2560, maxHeight = 2560, quality = 0.9): Promise<string> {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.src = url;
