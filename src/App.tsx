@@ -1322,29 +1322,33 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
                         </div>
                       )}
 
-                      <textarea 
-                        value={sq.answer} 
-                        onChange={(e) => {
-                          updateQuestion(sq.id, { answer: e.target.value }, q.id);
-                          e.target.style.height = 'auto';
-                          e.target.style.height = e.target.scrollHeight + 'px';
-                        }}
-                        onFocus={(e) => {
-                          e.target.style.height = 'auto';
-                          e.target.style.height = e.target.scrollHeight + 'px';
-                        }}
-                        placeholder="الإجابة النموذجية للفرع..."
-                        rows={1}
-                        className="w-full bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-100 text-xs outline-none focus:ring-2 focus:ring-emerald-500 overflow-hidden resize-none min-h-[40px]"
-                      />
-                      <div className="grid grid-cols-2 gap-4 mt-2">
-                        <ImageUpload 
-                          label="صورة الجواب للفرع" 
-                          value={sq.answerImage} 
-                          onChange={(base64) => updateQuestion(sq.id, { answerImage: base64 }, q.id)}
-                          onRemove={() => updateQuestion(sq.id, { answerImage: undefined }, q.id)}
-                        />
-                      </div>
+                      {(!sq.subQuestions || sq.subQuestions.length === 0) && (
+                        <>
+                          <textarea 
+                            value={sq.answer} 
+                            onChange={(e) => {
+                              updateQuestion(sq.id, { answer: e.target.value }, q.id);
+                              e.target.style.height = 'auto';
+                              e.target.style.height = e.target.scrollHeight + 'px';
+                            }}
+                            onFocus={(e) => {
+                              e.target.style.height = 'auto';
+                              e.target.style.height = e.target.scrollHeight + 'px';
+                            }}
+                            placeholder="الإجابة النموذجية للفرع..."
+                            rows={1}
+                            className="w-full bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-100 text-xs outline-none focus:ring-2 focus:ring-emerald-500 overflow-hidden resize-none min-h-[40px]"
+                          />
+                          <div className="grid grid-cols-2 gap-4 mt-2">
+                            <ImageUpload 
+                              label="صورة الجواب للفرع" 
+                              value={sq.answerImage} 
+                              onChange={(base64) => updateQuestion(sq.id, { answerImage: base64 }, q.id)}
+                              onRemove={() => updateQuestion(sq.id, { answerImage: undefined }, q.id)}
+                            />
+                          </div>
+                        </>
+                      )}
                     </div>
                   ))}
                   <div className="flex items-center gap-4 pt-2" data-html2canvas-ignore>

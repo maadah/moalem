@@ -55,9 +55,20 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     - All extracted text (title, questions, answers) MUST be in Arabic if the source is Arabic.
     
     HIERARCHY RULES:
-    1. Level 1: Main Questions (e.g., Q1, Q2, S1, S2).
-    2. Level 2: Branches (e.g., a, b, c or أ، ب، ج).
+    1. Level 1: Main Questions (e.g., Q1, Q2, S1, S2 or س1، س2).
+    2. Level 2: Branches (e.g., A, B or أ، ب).
     3. Level 3: Points (e.g., 1, 2, 3).
+    
+    CRITICAL EXTRACTION LOGIC:
+    - If a Question has Branches, the Question text is just a header (e.g., "Answer the following").
+    - If a Branch has Points, the Branch text is just a header (e.g., "Fill in the blanks").
+    - ONLY the leaf nodes (the deepest parts of the hierarchy) should definitely have an "answer" if found.
+    - Example 1: Q1 (no branches) -> Extract as Question with text and answer.
+    - Example 2: Q2 has Branch A and Branch B. Branch B has Points 1, 2, 3.
+      - Q2: text="Q2: Answer the following", subQuestions=[Branch A, Branch B]
+      - Branch A: text="A- Explain X", answer="...", subQuestions=[]
+      - Branch B: text="B- Fill in blanks", subQuestions=[Point 1, Point 2, Point 3]
+      - Point 1: text="1- ...", answer="..."
     
     EXTRACTION RULES:
     - If a question has sub-parts (branches), put them in the "subQuestions" array.
@@ -101,6 +112,51 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     },
   }));
 
+  // Define recursive schema for questions
+  const questionSchema: any = {
+    type: Type.OBJECT,
+    properties: {
+      id: { type: Type.STRING },
+      text: { type: Type.STRING },
+      answer: { type: Type.STRING },
+      grade: { type: Type.NUMBER },
+      type: { type: Type.STRING },
+      options: { type: Type.ARRAY, items: { type: Type.STRING } },
+      subStyle: { type: Type.STRING },
+      requiredSubCount: { type: Type.NUMBER },
+      subQuestions: {
+        type: Type.ARRAY,
+        items: {
+          type: Type.OBJECT,
+          properties: {
+            id: { type: Type.STRING },
+            text: { type: Type.STRING },
+            answer: { type: Type.STRING },
+            grade: { type: Type.NUMBER },
+            type: { type: Type.STRING },
+            options: { type: Type.ARRAY, items: { type: Type.STRING } },
+            subStyle: { type: Type.STRING },
+            requiredSubCount: { type: Type.NUMBER },
+            subQuestions: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  text: { type: Type.STRING },
+                  answer: { type: Type.STRING },
+                  grade: { type: Type.NUMBER },
+                  type: { type: Type.STRING },
+                  options: { type: Type.ARRAY, items: { type: Type.STRING } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  };
+
   const response = await ai.models.generateContent({
     model: "gemini-3.1-pro-preview",
     contents: { parts: [...imageParts, { text: prompt }] },
@@ -113,19 +169,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
           requiredQuestionsCount: { type: Type.NUMBER },
           questions: {
             type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                id: { type: Type.STRING },
-                text: { type: Type.STRING },
-                answer: { type: Type.STRING },
-                grade: { type: Type.NUMBER },
-                type: { type: Type.STRING },
-                options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                subStyle: { type: Type.STRING },
-                requiredSubCount: { type: Type.NUMBER }
-              }
-            }
+            items: questionSchema
           }
         }
       }
@@ -293,14 +337,17 @@ export async function gradeStudentPaper(
       2. Each student's paper might span one or more images. 
       3. Extract the student's name exactly as written. Do not add suffixes like "Part 1" or "Continuation". If an image is a continuation of the previous student, group them.
       4. **STRICT QUESTION MAPPING**: You MUST ONLY grade the questions listed in the "EXAM QUESTIONS" section above. 
-      5. If a student writes a question number that doesn't exist (e.g., writes "Q10" when there are only 4 questions), you MUST identify which of the 4 actual questions they are answering based on the content and map it to the correct "id".
-      6. **DO NOT CREATE NEW QUESTIONS**: Under no circumstances should you include a "questionId" in the output that is not present in the provided EXAM QUESTIONS list.
-      7. **STUDENT ANSWER EXTRACTION**: You MUST extract the FULL text of the student's handwritten answer for each question and put it in the "studentAnswer" field. This must be a VERBATIM transcription of what the student wrote. Do not summarize, shorten, or paraphrase it.
-      8. **MATCH IDs**: You MUST use the exact "id" from the EXAM QUESTIONS provided above for each grading result.
-      9. **ARABIC FEEDBACK ONLY**: You MUST provide all feedback and student names in Arabic language only.
-      10. **CONCISE FEEDBACK**: Provide very short, constructive feedback (max 15 words per question).
-      11. Calculate the total grade for the student.
-      12. **CRITICAL**: Ensure all strings are properly escaped for JSON. Do not include unescaped newlines or control characters.
+      5. **HIERARCHICAL GRADING**: 
+         - If a Question has sub-questions (branches/points), you MUST grade each sub-question individually using its specific "id".
+         - Do not give a single grade for a parent question if it has sub-questions; instead, provide a grading result for each leaf node (the deepest level) that the student answered.
+      6. If a student writes a question number that doesn't exist (e.g., writes "Q10" when there are only 4 questions), you MUST identify which of the 4 actual questions they are answering based on the content and map it to the correct "id".
+      7. **DO NOT CREATE NEW QUESTIONS**: Under no circumstances should you include a "questionId" in the output that is not present in the provided EXAM QUESTIONS list.
+      8. **STUDENT ANSWER EXTRACTION**: You MUST extract the FULL text of the student's handwritten answer for each question and put it in the "studentAnswer" field. This must be a VERBATIM transcription of what the student wrote. Do not summarize, shorten, or paraphrase it.
+      9. **MATCH IDs**: You MUST use the exact "id" from the EXAM QUESTIONS provided above for each grading result.
+      10. **ARABIC FEEDBACK ONLY**: You MUST provide all feedback and student names in Arabic language only.
+      11. **CONCISE FEEDBACK**: Provide very short, constructive feedback (max 15 words per question).
+      12. Calculate the total grade for the student.
+      13. **CRITICAL**: Ensure all strings are properly escaped for JSON. Do not include unescaped newlines or control characters.
     `;
 
     const imageParts = batch.map((base64) => ({
