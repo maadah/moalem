@@ -415,6 +415,8 @@ function Dashboard({ exams, onNewExam, onGrade, onEditExam, onDeleteExam }: any)
 function ExamCreator({ user, initialData, onSave, onCancel }: any) {
   const [title, setTitle] = useState(initialData?.title || '');
   const [duration, setDuration] = useState(initialData?.duration || '');
+  const [study, setStudy] = useState(initialData?.study || 'الإعدادية / العلمي');
+  const [round, setRound] = useState(initialData?.round || 'الدور الأول');
   const [totalGrade, setTotalGrade] = useState(initialData?.totalGrade || 100);
   const [requiredQuestionsCount, setRequiredQuestionsCount] = useState<number | null>(initialData?.requiredQuestionsCount || null);
   const [questions, setQuestions] = useState<Question[]>(initialData?.questions || []);
@@ -640,6 +642,8 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
       const examData = {
         title,
         duration,
+        study,
+        round,
         totalGrade,
         requiredQuestionsCount: requiredQuestionsCount || questions.length,
         questions: processedQuestions,
@@ -850,23 +854,35 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
       )}
 
       <div className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6" data-html2canvas-ignore>
-          <div className="space-y-2 md:col-span-1">
-            <label className="text-sm font-medium text-stone-500">عنوان الامتحان</label>
-            <textarea 
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6" data-html2canvas-ignore>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-stone-500">عنوان الامتحان / المادة</label>
+            <input 
+              type="text"
               value={title} 
-              onChange={(e) => {
-                setTitle(e.target.value);
-                e.target.style.height = 'auto';
-                e.target.style.height = e.target.scrollHeight + 'px';
-              }}
-              onFocus={(e) => {
-                e.target.style.height = 'auto';
-                e.target.style.height = e.target.scrollHeight + 'px';
-              }}
-              placeholder="مثال: امتحان اللغة العربية"
-              rows={1}
-              className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all overflow-hidden resize-none"
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="مثال: الكيمياء"
+              className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-stone-500">الدراسة</label>
+            <input 
+              type="text" 
+              value={study} 
+              onChange={(e) => setStudy(e.target.value)}
+              placeholder="مثال: الإعدادية / العلمي"
+              className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-stone-500">الدور</label>
+            <input 
+              type="text" 
+              value={round} 
+              onChange={(e) => setRound(e.target.value)}
+              placeholder="مثال: الدور الأول"
+              className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
             />
           </div>
           <div className="space-y-2">
@@ -889,7 +905,7 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-stone-500">الوقت (مثلاً: ساعتان)</label>
+            <label className="text-sm font-medium text-stone-500">الوقت (مثلاً: ثلاث ساعات)</label>
             <input 
               type="text" 
               value={duration} 
@@ -905,21 +921,20 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
           <div className="p-12 bg-white space-y-8 text-right" dir="rtl">
             <div className="flex justify-between items-start border-b-2 border-stone-900 pb-6">
               <div className="space-y-1">
-                <p className="font-bold text-lg">اللجنة الدائمة للامتحانات العامة</p>
-                <p>الدراسة: الإعدادية / العلمي</p>
+                <p className="font-bold text-lg">وزارة التربية</p>
+                <p>الدراسة: {study}</p>
                 <p>المادة: {title}</p>
               </div>
               <div className="text-center">
                 <div className="w-16 h-16 border-2 border-stone-900 rounded-full flex items-center justify-center mx-auto mb-2">
                   <span className="text-[10px] font-bold">شعار الوزارة</span>
                 </div>
-                <p className="font-bold">جمهورية العراق - وزارة التربية</p>
-                <p>الدور الأول / ٢٠٢٤ - ٢٠٢٥</p>
+                <p className="font-bold">جمهورية العراق</p>
+                <p>{round} / {new Date().getFullYear()} - {new Date().getFullYear() + 1}</p>
                 <p>الوقت: {duration || 'غير محدد'}</p>
               </div>
               <div className="space-y-1">
-                <p className="font-bold">الرقم الامتحاني: .................</p>
-                <p className="font-bold">اسم الطالب: .................</p>
+                <p className="font-bold pt-12">اسم الطالب: ........................................</p>
               </div>
             </div>
 
@@ -971,6 +986,9 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
             <h2 className="text-3xl font-bold text-center border-b-4 border-stone-900 pb-4">نموذج الأسئلة والأجوبة النموذجية</h2>
             <div className="grid grid-cols-2 gap-4 text-lg border-b pb-4">
               <p><span className="font-bold">المادة:</span> {title}</p>
+              <p><span className="font-bold">الدراسة:</span> {study}</p>
+              <p><span className="font-bold">الدور:</span> {round}</p>
+              <p><span className="font-bold">السنة الدراسية:</span> {new Date().getFullYear()} - {new Date().getFullYear() + 1}</p>
               <p><span className="font-bold">الدرجة الكلية:</span> {totalGrade}</p>
               <p><span className="font-bold">الوقت:</span> {duration}</p>
             </div>
