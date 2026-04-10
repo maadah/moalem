@@ -1486,13 +1486,31 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
   const [selectedMonth, setSelectedMonth] = useState<number | 'all'>('all');
 
+  const [isExportingAll, setIsExportingAll] = useState(false);
   const resultPrintRef = useRef<HTMLDivElement>(null);
+  const allResultsPrintRef = useRef<HTMLDivElement>(null);
 
   const exportPDF = async (result: any) => {
-    if (!resultPrintRef.current) return;
+    // If we're not in the detailed view, we need to temporarily set the selected result 
+    // or use a hidden template. Let's use a more robust approach.
+    const element = document.getElementById(`print-result-${result.id}`);
+    if (!element) {
+      // If not found, it might be because it's not rendered. 
+      // We'll fallback to the main ref if we are in detailed view.
+      if (selectedResult?.id === result.id && resultPrintRef.current) {
+        await generatePDFFromElement(resultPrintRef.current, `${result.studentName}_result.pdf`);
+      } else {
+        alert('يرجى فتح تفاصيل الطالب أولاً لتحميل الملف، أو استخدم زر "تحميل الكل"');
+      }
+      return;
+    }
     
+    await generatePDFFromElement(element, `${result.studentName}_result.pdf`);
+  };
+
+  const generatePDFFromElement = async (element: HTMLElement, fileName: string) => {
     try {
-      const canvas = await html2canvas(resultPrintRef.current, {
+      const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
         logging: false,
@@ -1510,11 +1528,35 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
       
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`${result.studentName}_result.pdf`);
+      // Handle multi-page if height exceeds A4
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      let heightLeft = pdfHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - pdfHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pageHeight;
+      }
+
+      pdf.save(fileName);
     } catch (error) {
       console.error('Error generating PDF:', error);
       alert('حدث خطأ أثناء إنشاء ملف PDF');
+    }
+  };
+
+  const exportAllPDF = async () => {
+    if (!allResultsPrintRef.current) return;
+    setIsExportingAll(true);
+    try {
+      await generatePDFFromElement(allResultsPrintRef.current, `all_results_${selectedSession.examTitle}.pdf`);
+    } finally {
+      setIsExportingAll(false);
     }
   };
 
@@ -1658,10 +1700,144 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
             <ArrowRight className="w-5 h-5" />
             العودة لقائمة المجموعات
           </button>
-          <div className="text-right">
-            <h3 className="text-xl font-bold">{selectedSession.examTitle}</h3>
-            <p className="text-stone-400 text-sm">{selectedSession.createdAt?.toDate().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={exportAllPDF}
+              disabled={isExportingAll}
+              className="bg-emerald-600 text-white px-6 py-2 rounded-xl flex items-center gap-2 hover:bg-emerald-700 transition-colors disabled:opacity-50"
+            >
+              {isExportingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              تحميل كل النتائج (PDF واحد)
+            </button>
+            <div className="text-right">
+              <h3 className="text-xl font-bold">{selectedSession.examTitle}</h3>
+              <p className="text-stone-400 text-sm">{selectedSession.createdAt?.toDate().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            </div>
           </div>
+        </div>
+
+        {/* Hidden area for printing all results */}
+        <div className="fixed left-[-9999px] top-0 w-[210mm]" ref={allResultsPrintRef}>
+          {sessionResults.map((res: any) => (
+            <div key={res.id} className="bg-white p-10 mb-10 border-b-2 border-stone-200" style={{ pageBreakAfter: 'always' }}>
+              <div className="flex items-center justify-between border-b border-stone-100 pb-6 mb-8">
+                <div>
+                  <h3 className="text-3xl font-bold">نتيجة الطالب: {res.studentName}</h3>
+                  <p className="text-stone-500 mt-2 text-lg">الامتحان: {res.examTitle}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-stone-400 text-sm">الدرجة النهائية</span>
+                  <div className="text-5xl font-bold text-emerald-600">
+                    {res.totalGrade}
+                    <span className="text-xl text-stone-300"> / {exams.find((e: any) => e.id === res.examId)?.totalGrade || '?'}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-6">
+                {res.gradings?.map((g: any, idx: number) => {
+                  const exam = exams.find((e: any) => e.id === res.examId);
+                  let question: any = null;
+                  if (exam) {
+                    exam.questions.forEach((q: any) => {
+                      if (q.id === g.questionId) question = q;
+                      q.subQuestions?.forEach((sq: any) => {
+                        if (sq.id === g.questionId) question = sq;
+                        sq.subQuestions?.forEach((ssq: any) => {
+                          if (ssq.id === g.questionId) question = ssq;
+                        });
+                      });
+                    });
+                  }
+                  return (
+                    <div key={idx} className="p-6 bg-stone-50 rounded-2xl border border-stone-100">
+                      <div className="flex justify-between mb-4">
+                        <span className="font-bold text-lg">سؤال {idx + 1}: {question?.text || 'سؤال محذوف'}</span>
+                        <span className="font-bold text-emerald-600">{g.grade} / {question?.grade || '?'}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-6 text-sm">
+                        <div>
+                          <span className="text-stone-400 block mb-1">إجابة الطالب:</span>
+                          <p className="p-3 bg-white rounded-xl border border-stone-100">"{g.studentAnswer}"</p>
+                        </div>
+                        <div>
+                          <span className="text-stone-400 block mb-1">الإجابة النموذجية:</span>
+                          <p className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800">"{question?.answer || 'غير متوفرة'}"</p>
+                        </div>
+                      </div>
+                      {g.feedback && (
+                        <div className="mt-4 pt-4 border-t border-stone-200">
+                          <span className="text-xs font-bold text-stone-400 uppercase">ملاحظات المصحح:</span>
+                          <p className="text-stone-600 mt-1">{g.feedback}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Hidden area for individual printing from list */}
+        <div className="fixed left-[-9999px] top-0 w-[210mm]">
+          {sessionResults.map((res: any) => (
+            <div key={res.id} id={`print-result-${res.id}`} className="bg-white p-10">
+               <div className="flex items-center justify-between border-b border-stone-100 pb-6 mb-8">
+                <div>
+                  <h3 className="text-3xl font-bold">نتيجة الطالب: {res.studentName}</h3>
+                  <p className="text-stone-500 mt-2 text-lg">الامتحان: {res.examTitle}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-stone-400 text-sm">الدرجة النهائية</span>
+                  <div className="text-5xl font-bold text-emerald-600">
+                    {res.totalGrade}
+                    <span className="text-xl text-stone-300"> / {exams.find((e: any) => e.id === res.examId)?.totalGrade || '?'}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-6">
+                {res.gradings?.map((g: any, idx: number) => {
+                  const exam = exams.find((e: any) => e.id === res.examId);
+                  let question: any = null;
+                  if (exam) {
+                    exam.questions.forEach((q: any) => {
+                      if (q.id === g.questionId) question = q;
+                      q.subQuestions?.forEach((sq: any) => {
+                        if (sq.id === g.questionId) question = sq;
+                        sq.subQuestions?.forEach((ssq: any) => {
+                          if (ssq.id === g.questionId) question = ssq;
+                        });
+                      });
+                    });
+                  }
+                  return (
+                    <div key={idx} className="p-6 bg-stone-50 rounded-2xl border border-stone-100">
+                      <div className="flex justify-between mb-4">
+                        <span className="font-bold text-lg">سؤال {idx + 1}: {question?.text || 'سؤال محذوف'}</span>
+                        <span className="font-bold text-emerald-600">{g.grade} / {question?.grade || '?'}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-6 text-sm">
+                        <div>
+                          <span className="text-stone-400 block mb-1">إجابة الطالب:</span>
+                          <p className="p-3 bg-white rounded-xl border border-stone-100">"{g.studentAnswer}"</p>
+                        </div>
+                        <div>
+                          <span className="text-stone-400 block mb-1">الإجابة النموذجية:</span>
+                          <p className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800">"{question?.answer || 'غير متوفرة'}"</p>
+                        </div>
+                      </div>
+                      {g.feedback && (
+                        <div className="mt-4 pt-4 border-t border-stone-200">
+                          <span className="text-xs font-bold text-stone-400 uppercase">ملاحظات المصحح:</span>
+                          <p className="text-stone-600 mt-1">{g.feedback}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
 
         <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
