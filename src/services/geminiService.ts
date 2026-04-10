@@ -75,7 +75,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     - Detect choice logic (e.g., "Answer 5 questions only") and set "requiredQuestionsCount" or "requiredSubCount".
     - Generate unique IDs for every single item.
     - **MANDATORY**: You MUST extract ALL questions visible in the images. Do not skip any. Scan the whole page.
-    - **JSON SAFETY**: Ensure all quotes are escaped. Do not include unescaped newlines within strings.
+    - **JSON SAFETY**: Ensure all quotes are escaped. Do not include unescaped newlines within strings. Use \n for newlines.
     
     OUTPUT FORMAT (JSON ONLY):
     {
@@ -109,7 +109,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     };
   }));
 
-  // Define recursive schema for questions
+  // Define recursive schema for questions - simplified to reduce token overhead
   const questionSchema: any = {
     type: Type.OBJECT,
     required: ["id", "text", "type"],
@@ -146,8 +146,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
                   text: { type: Type.STRING },
                   answer: { type: Type.STRING },
                   grade: { type: Type.NUMBER },
-                  type: { type: Type.STRING },
-                  options: { type: Type.ARRAY, items: { type: Type.STRING } }
+                  type: { type: Type.STRING }
                 }
               }
             }
@@ -158,20 +157,16 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
   };
 
   const response = await ai.models.generateContent({
-    model: "gemini-3.1-pro-preview", // Use Pro for better complex extraction from dense images
+    model: "gemini-3.1-pro-preview", 
     contents: { parts: [...imageParts, { text: prompt }] },
     config: {
-      systemInstruction: "You are a professional exam digitizer. Your task is to extract every single question, branch, and point from exam images into a precise JSON structure. Never skip content.",
+      systemInstruction: "You are a professional exam digitizer. Extract every question into a precise JSON structure. Ensure all strings are properly escaped for JSON. Use \n for newlines.",
       responseMimeType: "application/json",
       maxOutputTokens: 8192,
       responseSchema: {
         type: Type.OBJECT,
-        required: ["questions", "extraction_plan"],
+        required: ["questions"],
         properties: {
-          extraction_plan: { 
-            type: Type.STRING, 
-            description: "A brief plan listing all questions found (e.g., 'Found س1, س2, س3, س4, س5, س6. Starting extraction...')" 
-          },
           title: { type: Type.STRING },
           requiredQuestionsCount: { type: Type.NUMBER },
           questions: {
@@ -189,23 +184,31 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
   try {
     return JSON.parse(text);
   } catch (innerError) {
-    let cleaned = text
-      .replace(/[\u0000-\u001F\u007F-\u009F]/g, "") // Remove control characters
-      .replace(/```json\n?|```/g, "")
-      .trim();
+    console.warn("Initial JSON parse failed, attempting repair...", innerError);
     
+    let cleaned = text.trim();
+    
+    // Remove markdown code blocks if present
+    cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    
+    // Handle unescaped newlines within strings (common cause of SyntaxError)
+    // This regex looks for newlines that are NOT preceded by a backslash
+    cleaned = cleaned.replace(/(?<!\\)\n/g, "\\n");
+
     // Attempt to repair truncated JSON by closing arrays/objects
-    // This is a basic heuristic to close open structures if the string was cut off
     let openBraces = (cleaned.match(/\{/g) || []).length;
     let closeBraces = (cleaned.match(/\}/g) || []).length;
     let openBrackets = (cleaned.match(/\[/g) || []).length;
     let closeBrackets = (cleaned.match(/\]/g) || []).length;
 
     // If it's cut off inside a string, close the string first
-    if (cleaned.split('"').length % 2 === 0) {
+    // We check if the number of double quotes is odd
+    const quoteMatches = cleaned.match(/"/g);
+    if (quoteMatches && quoteMatches.length % 2 !== 0) {
       cleaned += '"';
     }
 
+    // Close open structures
     while (openBrackets > closeBrackets) {
       cleaned += ']';
       closeBrackets++;
@@ -219,14 +222,24 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
       return JSON.parse(cleaned);
     } catch (e2) {
       console.error("Final JSON parse failed even after repair attempt.", e2);
-      // If it still fails, try to find the last valid question and truncate there
+      
+      // Last ditch effort: try to find the last complete object in the questions array
       try {
-        const lastValidIndex = cleaned.lastIndexOf('},');
-        if (lastValidIndex !== -1) {
-          const partial = cleaned.substring(0, lastValidIndex) + '}]}';
-          return JSON.parse(partial);
+        const questionsStart = cleaned.indexOf('"questions":');
+        if (questionsStart !== -1) {
+          const lastValidObject = cleaned.lastIndexOf('}');
+          if (lastValidObject !== -1) {
+            let partial = cleaned.substring(0, lastValidObject + 1);
+            // Ensure we close the array and the root object
+            if (!partial.endsWith(']')) partial += ']';
+            if (!partial.endsWith('}')) partial += '}';
+            return JSON.parse(partial);
+          }
         }
-      } catch (e3) {}
+      } catch (e3) {
+        console.error("Emergency JSON recovery failed.", e3);
+      }
+      
       throw innerError;
     }
   }
