@@ -1858,16 +1858,29 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
           <div className="space-y-4">
             {selectedResult.gradings?.map((g: any, i: number) => {
               let question: any = null;
+              let label = "";
+              
               if (exam) {
-                exam.questions.forEach((q: any) => {
-                  if (q.id === g.questionId) question = q;
-                  q.subQuestions?.forEach((sq: any) => {
-                    if (sq.id === g.questionId) question = sq;
-                    sq.subQuestions?.forEach((ssq: any) => {
-                      if (ssq.id === g.questionId) question = ssq;
-                    });
-                  });
-                });
+                const findInHierarchy = (qs: Question[], path: string = ""): boolean => {
+                  for (let idx = 0; idx < qs.length; idx++) {
+                    const q = qs[idx];
+                    let currentLabel = q.text.split(/[:\-\.]/)[0].trim();
+                    if (currentLabel.length > 10) currentLabel = `Item ${idx + 1}`;
+                    
+                    const fullPath = path ? `${path} / ${currentLabel}` : currentLabel;
+                    
+                    if (q.id === g.questionId) {
+                      question = q;
+                      label = fullPath;
+                      return true;
+                    }
+                    if (q.subQuestions && findInHierarchy(q.subQuestions, fullPath)) {
+                      return true;
+                    }
+                  }
+                  return false;
+                };
+                findInHierarchy(exam.questions);
               }
 
               const isParent = question?.subQuestions && question.subQuestions.length > 0;
@@ -1876,7 +1889,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
                 <div key={i} className="p-6 bg-stone-50 rounded-2xl border border-stone-100 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="flex flex-col gap-2">
-                      <span className="font-bold text-stone-700">سؤال {i + 1}: {question?.text || 'سؤال محذوف'}</span>
+                      <span className="font-bold text-stone-700">سؤال {label || i + 1}: {question?.text || 'سؤال محذوف'}</span>
                       {question?.questionImage && (
                         <img 
                           src={question.questionImage} 

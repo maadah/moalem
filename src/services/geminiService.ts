@@ -363,6 +363,32 @@ export async function gradeStudentPaper(
   };
   collectIds(questions);
 
+  // Flatten questions for the AI to make mapping easier and more accurate
+  const flattenedQuestions: any[] = [];
+  const flatten = (qs: Question[], path: string = "") => {
+    qs.forEach((q, index) => {
+      // Try to extract a clean label (e.g., "س1" or "أ")
+      let label = q.text.split(/[:\-\.]/)[0].trim();
+      if (label.length > 10) label = `Item ${index + 1}`;
+      
+      const fullPath = path ? `${path} / ${label}` : label;
+      
+      if (!q.subQuestions || q.subQuestions.length === 0) {
+        flattenedQuestions.push({
+          id: q.id,
+          label: fullPath,
+          text: q.text,
+          modelAnswer: q.answer,
+          maxGrade: q.grade,
+          type: q.type
+        });
+      } else {
+        flatten(q.subQuestions, fullPath);
+      }
+    });
+  };
+  flatten(questions);
+
   // Flash can handle large contexts. 10 images per batch is efficient and fast.
   const BATCH_SIZE = 10; 
   const allResults: any[] = [];
@@ -408,28 +434,24 @@ export async function gradeStudentPaper(
       You are an expert teacher grading student handwritten exam papers.
       
       EXAM QUESTIONS AND MODEL ANSWERS (Use these IDs exactly):
-      ${JSON.stringify(questions, null, 2)}
+      ${JSON.stringify(flattenedQuestions, null, 2)}
       
       TOTAL EXAM GRADE: ${totalExamGrade}
-      NUMBER OF QUESTIONS IN THIS EXAM: ${questions.length}
       REQUIRED QUESTIONS COUNT: ${requiredQuestionsCount}
       
       INSTRUCTIONS:
       1. Analyze the provided images (Batch ${currentBatchIndex} of ${totalBatches}).
       2. Each student's paper might span one or more images. 
-      3. Extract the student's name exactly as written. Do not add suffixes like "Part 1" or "Continuation". If an image is a continuation of the previous student, group them.
+      3. Extract the student's name exactly as written.
       4. **STRICT QUESTION MAPPING**: You MUST ONLY grade the questions listed in the "EXAM QUESTIONS" section above. 
-      5. **HIERARCHICAL GRADING**: 
-         - If a Question has sub-questions (branches/points), you MUST grade each sub-question individually using its specific "id".
-         - Do not give a single grade for a parent question if it has sub-questions; instead, provide a grading result for each leaf node (the deepest level) that the student answered.
-      6. If a student writes a question number that doesn't exist (e.g., writes "Q10" when there are only 4 questions), you MUST identify which of the 4 actual questions they are answering based on the content and map it to the correct "id".
-      7. **DO NOT CREATE NEW QUESTIONS**: Under no circumstances should you include a "questionId" in the output that is not present in the provided EXAM QUESTIONS list.
-      8. **STUDENT ANSWER EXTRACTION**: You MUST extract the FULL text of the student's handwritten answer for each question and put it in the "studentAnswer" field. This must be a VERBATIM transcription of what the student wrote. Do not summarize, shorten, or paraphrase it.
-      9. **MATCH IDs**: You MUST use the exact "id" from the EXAM QUESTIONS provided above for each grading result.
-      10. **ARABIC FEEDBACK ONLY**: You MUST provide all feedback and student names in Arabic language only.
-      11. **CONCISE FEEDBACK**: Provide very short, constructive feedback (max 15 words per question).
-      12. Calculate the total grade for the student.
-      13. **CRITICAL**: Ensure all strings are properly escaped for JSON. Do not include unescaped newlines or control characters.
+      5. **MATCH IDs**: You MUST use the exact "id" from the list provided above for each grading result.
+      6. If a student writes a question label like "Q2 A", match it to the corresponding "label" in the list (e.g., "س2 / أ").
+      7. **DO NOT CREATE NEW QUESTIONS**: Under no circumstances should you include a "questionId" in the output that is not present in the provided list.
+      8. **STUDENT ANSWER EXTRACTION**: You MUST extract the FULL text of the student's handwritten answer for each question and put it in the "studentAnswer" field. This must be a VERBATIM transcription.
+      9. **ARABIC FEEDBACK ONLY**: You MUST provide all feedback and student names in Arabic language only.
+      10. **CONCISE FEEDBACK**: Provide very short, constructive feedback (max 15 words per question).
+      11. Calculate the total grade for the student.
+      12. **CRITICAL**: Ensure all strings are properly escaped for JSON.
     `;
 
     const imageParts = batch.map((base64) => ({
