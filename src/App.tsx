@@ -670,19 +670,25 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
     
     setIsPrinting(true);
     try {
-      // Use the robust generatePDFFromElement we defined earlier (it's in App scope, we need to pass it or redefine)
-      // Since it's inside App, we'll redefine a robust version here or use the one from App if possible.
-      // Let's redefine for reliability in this component.
-      
       const element = ref.current;
+      
+      // Wait a bit for images to potentially load in the hidden div
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight
       });
       
-      const imgData = canvas.toDataURL('image/png');
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      if (imgData === 'data:,') {
+        throw new Error('Canvas is empty');
+      }
+
       const pdf = new jsPDF({
         orientation: 'p',
         unit: 'mm',
@@ -697,20 +703,22 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
       let heightLeft = pdfHeight;
       let position = 0;
 
-      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+      // Add first page
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
       heightLeft -= pageHeight;
 
-      while (heightLeft >= 0) {
+      // Add subsequent pages if content is longer than one page
+      while (heightLeft > 0) {
         position = heightLeft - pdfHeight;
         pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
         heightLeft -= pageHeight;
       }
 
       pdf.save(`${title || 'exam'}_${mode}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('حدث خطأ أثناء إنشاء ملف PDF. تأكد من أن الألوان متوافقة.');
+      alert('حدث خطأ أثناء إنشاء ملف PDF. يرجى التأكد من أن جميع الصور محملة بشكل صحيح.');
     } finally {
       setIsPrinting(false);
     }
@@ -841,7 +849,7 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
         </motion.div>
       )}
 
-      <div ref={examPrintRef} className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
+      <div className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6" data-html2canvas-ignore>
           <div className="space-y-2 md:col-span-1">
             <label className="text-sm font-medium text-stone-500">عنوان الامتحان</label>
@@ -893,7 +901,7 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
         </div>
 
         {/* Official Exam Header for PDF (Questions Only) */}
-        <div className="hidden pdf-export-container" ref={examPrintRef}>
+        <div className="fixed left-[-9999px] top-0 w-[210mm] pdf-export-container" ref={examPrintRef}>
           <div className="p-12 bg-white space-y-8 text-right" dir="rtl">
             <div className="flex justify-between items-start border-b-2 border-stone-900 pb-6">
               <div className="space-y-1">
@@ -958,7 +966,7 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
         </div>
 
         {/* Full Exam Preview for PDF (Questions & Answers) */}
-        <div className="hidden pdf-export-container" ref={examFullPrintRef}>
+        <div className="fixed left-[-9999px] top-0 w-[210mm] pdf-export-container" ref={examFullPrintRef}>
           <div className="p-12 bg-white space-y-8 text-right" dir="rtl">
             <h2 className="text-3xl font-bold text-center border-b-4 border-stone-900 pb-4">نموذج الأسئلة والأجوبة النموذجية</h2>
             <div className="grid grid-cols-2 gap-4 text-lg border-b pb-4">

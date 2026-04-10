@@ -44,6 +44,7 @@
 .pdf-export-container .bg-stone-100 { background-color: #f5f5f4 !important; }
 .pdf-export-container .bg-emerald-50 { background-color: #ecfdf5 !important; }
 .pdf-export-container .bg-emerald-600 { background-color: #059669 !important; }
+.pdf-export-container .bg-stone-900 { background-color: #1c1917 !important; }
 
 .pdf-export-container .text-white { color: #ffffff !important; }
 .pdf-export-container .text-emerald-600 { color: #059669 !important; }
@@ -56,6 +57,7 @@
 
 .pdf-export-container .border-stone-100 { border-color: #f5f5f4 !important; }
 .pdf-export-container .border-stone-200 { border-color: #e7e5e4 !important; }
+.pdf-export-container .border-stone-900 { border-color: #1c1917 !important; }
 .pdf-export-container .border-emerald-100 { border-color: #d1fae5 !important; }
 .pdf-export-container .border-b-2 { border-bottom-width: 2px !important; }
 .pdf-export-container .border { border-width: 1px !important; }
