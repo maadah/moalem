@@ -414,15 +414,19 @@ function Dashboard({ exams, onNewExam, onGrade, onEditExam, onDeleteExam }: any)
 
 function ExamCreator({ user, initialData, onSave, onCancel }: any) {
   const [title, setTitle] = useState(initialData?.title || '');
+  const [duration, setDuration] = useState(initialData?.duration || '');
   const [totalGrade, setTotalGrade] = useState(initialData?.totalGrade || 100);
   const [requiredQuestionsCount, setRequiredQuestionsCount] = useState<number | null>(initialData?.requiredQuestionsCount || null);
   const [questions, setQuestions] = useState<Question[]>(initialData?.questions || []);
   const [isSaving, setIsSaving] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
+  const [printMode, setPrintMode] = useState<'questions' | 'both'>('questions');
   const [extractionImages, setExtractionImages] = useState<string[]>([]);
   const extractionInputRef = useRef<HTMLInputElement>(null);
   const extractionCameraInputRef = useRef<HTMLInputElement>(null);
   const examPrintRef = useRef<HTMLDivElement>(null);
+  const examFullPrintRef = useRef<HTMLDivElement>(null);
 
   const uploadImageToStorage = async (base64: string, path: string) => {
     if (!base64 || !base64.startsWith('data:image')) return base64;
@@ -635,6 +639,7 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
       
       const examData = {
         title,
+        duration,
         totalGrade,
         requiredQuestionsCount: requiredQuestionsCount || questions.length,
         questions: processedQuestions,
@@ -659,11 +664,18 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
     }
   };
 
-  const printExam = async () => {
-    if (!examPrintRef.current) return;
+  const printExam = async (mode: 'questions' | 'both') => {
+    const ref = mode === 'questions' ? examPrintRef : examFullPrintRef;
+    if (!ref.current) return;
     
+    setIsPrinting(true);
     try {
-      const canvas = await html2canvas(examPrintRef.current, {
+      // Use the robust generatePDFFromElement we defined earlier (it's in App scope, we need to pass it or redefine)
+      // Since it's inside App, we'll redefine a robust version here or use the one from App if possible.
+      // Let's redefine for reliability in this component.
+      
+      const element = ref.current;
+      const canvas = await html2canvas(element, {
         scale: 2,
         useCORS: true,
         logging: false,
@@ -681,11 +693,26 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
       
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`${title || 'exam'}.pdf`);
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      let heightLeft = pdfHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft >= 0) {
+        position = heightLeft - pdfHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+        heightLeft -= pageHeight;
+      }
+
+      pdf.save(`${title || 'exam'}_${mode}.pdf`);
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('حدث خطأ أثناء إنشاء ملف PDF');
+      alert('حدث خطأ أثناء إنشاء ملف PDF. تأكد من أن الألوان متوافقة.');
+    } finally {
+      setIsPrinting(false);
     }
   };
 
@@ -734,7 +761,31 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
             className="hidden" 
           />
           <button onClick={onCancel} className="px-6 py-2 rounded-xl text-stone-500 hover:bg-stone-100 transition-colors">إلغاء</button>
-          <button onClick={printExam} className="px-6 py-2 rounded-xl bg-stone-900 text-white flex items-center gap-2 hover:bg-stone-800"><Download className="w-4 h-4" /> معاينة PDF</button>
+          
+          <div className="relative group/print">
+            <button 
+              disabled={isPrinting}
+              className="px-6 py-2 rounded-xl bg-stone-900 text-white flex items-center gap-2 hover:bg-stone-800 disabled:opacity-50"
+            >
+              {isPrinting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              تحميل PDF
+            </button>
+            <div className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-stone-100 py-2 opacity-0 invisible group-hover/print:opacity-100 group-hover/print:visible transition-all z-50">
+              <button 
+                onClick={() => printExam('questions')}
+                className="w-full text-right px-4 py-2 text-sm hover:bg-stone-50 text-stone-700"
+              >
+                تحميل الأسئلة فقط
+              </button>
+              <button 
+                onClick={() => printExam('both')}
+                className="w-full text-right px-4 py-2 text-sm hover:bg-stone-50 text-stone-700 border-t border-stone-50"
+              >
+                تحميل الأسئلة والأجوبة
+              </button>
+            </div>
+          </div>
+
           <button 
             onClick={saveExam} 
             disabled={isSaving}
@@ -791,8 +842,8 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
       )}
 
       <div ref={examPrintRef} className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="space-y-2">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6" data-html2canvas-ignore>
+          <div className="space-y-2 md:col-span-1">
             <label className="text-sm font-medium text-stone-500">عنوان الامتحان</label>
             <textarea 
               value={title} 
@@ -805,7 +856,7 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
                 e.target.style.height = 'auto';
                 e.target.style.height = e.target.scrollHeight + 'px';
               }}
-              placeholder="مثال: امتحان اللغة العربية - الفصل الأول"
+              placeholder="مثال: امتحان اللغة العربية"
               rows={1}
               className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all overflow-hidden resize-none"
             />
@@ -820,7 +871,7 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
             />
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium text-stone-500">عدد الأسئلة المطلوب الإجابة عليها</label>
+            <label className="text-sm font-medium text-stone-500">عدد الأسئلة المطلوب حلها</label>
             <input 
               type="number" 
               value={requiredQuestionsCount || ''} 
@@ -828,6 +879,130 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
               placeholder={`الافتراضي: ${questions.length || 0}`}
               className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
             />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-stone-500">الوقت (مثلاً: ساعتان)</label>
+            <input 
+              type="text" 
+              value={duration} 
+              onChange={(e) => setDuration(e.target.value)}
+              placeholder="الوقت المخصص"
+              className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+            />
+          </div>
+        </div>
+
+        {/* Official Exam Header for PDF (Questions Only) */}
+        <div className="hidden pdf-export-container" ref={examPrintRef}>
+          <div className="p-12 bg-white space-y-8 text-right" dir="rtl">
+            <div className="flex justify-between items-start border-b-2 border-stone-900 pb-6">
+              <div className="space-y-1">
+                <p className="font-bold text-lg">اللجنة الدائمة للامتحانات العامة</p>
+                <p>الدراسة: الإعدادية / العلمي</p>
+                <p>المادة: {title}</p>
+              </div>
+              <div className="text-center">
+                <div className="w-16 h-16 border-2 border-stone-900 rounded-full flex items-center justify-center mx-auto mb-2">
+                  <span className="text-[10px] font-bold">شعار الوزارة</span>
+                </div>
+                <p className="font-bold">جمهورية العراق - وزارة التربية</p>
+                <p>الدور الأول / ٢٠٢٤ - ٢٠٢٥</p>
+                <p>الوقت: {duration || 'غير محدد'}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="font-bold">الرقم الامتحاني: .................</p>
+                <p className="font-bold">اسم الطالب: .................</p>
+              </div>
+            </div>
+
+            <div className="bg-stone-100 p-4 rounded-lg border border-stone-200">
+              <p className="font-bold">ملاحظة: الإجابة عن {requiredQuestionsCount || questions.length} أسئلة فقط، ولكل سؤال {Math.round(totalGrade / (requiredQuestionsCount || questions.length))} درجة.</p>
+            </div>
+
+            <div className="space-y-10">
+              {questions.map((q, idx) => (
+                <div key={q.id} className="space-y-4">
+                  <div className="flex justify-between items-start">
+                    <h4 className="text-xl font-bold">س{idx + 1}: {q.text}</h4>
+                    <span className="font-bold">({q.grade} درجة)</span>
+                  </div>
+                  {q.questionImage && <img src={q.questionImage} className="max-h-64 object-contain rounded-lg" referrerPolicy="no-referrer" />}
+                  
+                  <div className="mr-6 space-y-4">
+                    {q.subQuestions?.map((sq, sqIdx) => (
+                      <div key={sq.id} className="space-y-2">
+                        <div className="flex justify-between">
+                          <p className="font-medium">
+                            {q.subStyle === 'letters' ? `${String.fromCharCode(1571 + sqIdx)}- ` : `${sqIdx + 1}- `}
+                            {sq.text}
+                          </p>
+                          <span className="text-sm">({sq.grade} درجة)</span>
+                        </div>
+                        {sq.questionImage && <img src={sq.questionImage} className="max-h-48 object-contain rounded-lg" referrerPolicy="no-referrer" />}
+                        
+                        <div className="mr-6 space-y-2">
+                          {sq.subQuestions?.map((ssq, ssqIdx) => (
+                            <div key={ssq.id} className="flex justify-between text-sm">
+                              <p>{ssqIdx + 1}- {ssq.text}</p>
+                              <span>({ssq.grade} درجة)</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Full Exam Preview for PDF (Questions & Answers) */}
+        <div className="hidden pdf-export-container" ref={examFullPrintRef}>
+          <div className="p-12 bg-white space-y-8 text-right" dir="rtl">
+            <h2 className="text-3xl font-bold text-center border-b-4 border-stone-900 pb-4">نموذج الأسئلة والأجوبة النموذجية</h2>
+            <div className="grid grid-cols-2 gap-4 text-lg border-b pb-4">
+              <p><span className="font-bold">المادة:</span> {title}</p>
+              <p><span className="font-bold">الدرجة الكلية:</span> {totalGrade}</p>
+              <p><span className="font-bold">الوقت:</span> {duration}</p>
+            </div>
+
+            <div className="space-y-12">
+              {questions.map((q, idx) => (
+                <div key={q.id} className="p-6 border-2 border-stone-200 rounded-2xl space-y-6">
+                  <div className="flex justify-between items-center bg-stone-50 p-3 rounded-xl">
+                    <h4 className="text-xl font-bold">س{idx + 1}: {q.text}</h4>
+                    <span className="bg-stone-900 text-white px-4 py-1 rounded-full text-sm">{q.grade} درجة</span>
+                  </div>
+                  
+                  {q.answer && (
+                    <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+                      <p className="text-emerald-800 font-bold mb-2">الإجابة النموذجية:</p>
+                      <p className="whitespace-pre-wrap">{q.answer}</p>
+                      {q.answerImage && <img src={q.answerImage} className="mt-4 max-h-64 object-contain rounded-lg" referrerPolicy="no-referrer" />}
+                    </div>
+                  )}
+
+                  <div className="mr-6 space-y-6">
+                    {q.subQuestions?.map((sq, sqIdx) => (
+                      <div key={sq.id} className="space-y-4 border-r-2 border-stone-100 pr-4">
+                        <div className="flex justify-between font-bold">
+                          <p>{q.subStyle === 'letters' ? `${String.fromCharCode(1571 + sqIdx)}- ` : `${sqIdx + 1}- `} {sq.text}</p>
+                          <span>{sq.grade} درجة</span>
+                        </div>
+                        {sq.answer && (
+                          <div className="bg-stone-50 p-3 rounded-lg border border-stone-200 text-sm">
+                            <p className="font-bold text-stone-500 mb-1">الجواب:</p>
+                            <p>{sq.answer}</p>
+                            {sq.answerImage && <img src={sq.answerImage} className="mt-2 max-h-48 object-contain rounded-lg" referrerPolicy="no-referrer" />}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
