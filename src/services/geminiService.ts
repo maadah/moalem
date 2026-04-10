@@ -227,6 +227,16 @@ export async function gradeStudentPaper(
 
   const ai = new GoogleGenAI({ apiKey });
   
+  // Get all valid question IDs to filter out hallucinations
+  const validQuestionIds = new Set<string>();
+  const collectIds = (qs: Question[]) => {
+    qs.forEach(q => {
+      validQuestionIds.add(q.id);
+      if (q.subQuestions) collectIds(q.subQuestions);
+    });
+  };
+  collectIds(questions);
+
   // Flash can handle large contexts. 10 images per batch is efficient and fast.
   const BATCH_SIZE = 10; 
   const allResults: any[] = [];
@@ -275,19 +285,22 @@ export async function gradeStudentPaper(
       ${JSON.stringify(questions, null, 2)}
       
       TOTAL EXAM GRADE: ${totalExamGrade}
+      NUMBER OF QUESTIONS IN THIS EXAM: ${questions.length}
       REQUIRED QUESTIONS COUNT: ${requiredQuestionsCount}
       
       INSTRUCTIONS:
       1. Analyze the provided images (Batch ${currentBatchIndex} of ${totalBatches}).
       2. Each student's paper might span one or more images. 
       3. Extract the student's name exactly as written. Do not add suffixes like "Part 1" or "Continuation". If an image is a continuation of the previous student, group them.
-      4. Grade each question accurately based on the model answers.
-      5. **STUDENT ANSWER EXTRACTION**: You MUST extract the FULL text of the student's handwritten answer for each question and put it in the "studentAnswer" field. This must be a VERBATIM transcription of what the student wrote. Do not summarize, shorten, or paraphrase it. It is critical for the teacher to see exactly what the student wrote.
-      6. **MATCH IDs**: You MUST use the exact "id" from the EXAM QUESTIONS provided above for each grading result.
-      7. **ARABIC FEEDBACK ONLY**: You MUST provide all feedback and student names in Arabic language only.
-      8. **CONCISE FEEDBACK**: Provide very short, constructive feedback (max 15 words per question). Do not repeat the question or model answer.
-      9. Calculate the total grade for the student.
-      10. **CRITICAL**: Ensure all strings are properly escaped for JSON. Do not include unescaped newlines or control characters.
+      4. **STRICT QUESTION MAPPING**: You MUST ONLY grade the questions listed in the "EXAM QUESTIONS" section above. 
+      5. If a student writes a question number that doesn't exist (e.g., writes "Q10" when there are only 4 questions), you MUST identify which of the 4 actual questions they are answering based on the content and map it to the correct "id".
+      6. **DO NOT CREATE NEW QUESTIONS**: Under no circumstances should you include a "questionId" in the output that is not present in the provided EXAM QUESTIONS list.
+      7. **STUDENT ANSWER EXTRACTION**: You MUST extract the FULL text of the student's handwritten answer for each question and put it in the "studentAnswer" field. This must be a VERBATIM transcription of what the student wrote. Do not summarize, shorten, or paraphrase it.
+      8. **MATCH IDs**: You MUST use the exact "id" from the EXAM QUESTIONS provided above for each grading result.
+      9. **ARABIC FEEDBACK ONLY**: You MUST provide all feedback and student names in Arabic language only.
+      10. **CONCISE FEEDBACK**: Provide very short, constructive feedback (max 15 words per question).
+      11. Calculate the total grade for the student.
+      12. **CRITICAL**: Ensure all strings are properly escaped for JSON. Do not include unescaped newlines or control characters.
     `;
 
     const imageParts = batch.map((base64) => ({
@@ -337,7 +350,13 @@ export async function gradeStudentPaper(
       }
       
       if (parsed.results && Array.isArray(parsed.results)) {
-        allResults.push(...parsed.results);
+        // Filter out hallucinated question IDs
+        const filteredResults = parsed.results.map((student: any) => ({
+          ...student,
+          gradings: (student.gradings || []).filter((g: any) => validQuestionIds.has(g.questionId))
+        })).filter((student: any) => student.gradings.length > 0);
+        
+        allResults.push(...filteredResults);
       }
     } catch (e: any) {
       console.error(`Error in grading batch ${i}:`, e);
