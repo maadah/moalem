@@ -52,7 +52,9 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     Analyze the provided images of an exam paper and extract EVERY SINGLE question, branch, and point into a structured JSON format.
     
     THINKING STEP:
-    Before generating the JSON, mentally list all the main questions you see (e.g., س1, س2, س3, س4, س5, س6). Ensure your JSON includes every single one of them.
+    1. Identify general exam instructions (e.g., "Answer 5 questions only", "Write equations where found").
+    2. Mentally list all the main questions (e.g., س1, س2, س3, س4, س5, س6).
+    3. Ensure your JSON includes every single actual question, but excludes general instructions from the questions array.
     
     CRITICAL: This is a full exam paper. You MUST scan the entire image from top to bottom and extract all questions. Do not stop after the first question.
     
@@ -65,6 +67,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     3. Level 3: Points (e.g., 1, 2, 3).
     
     CRITICAL EXTRACTION LOGIC:
+    - **GENERAL INSTRUCTIONS**: Text like "Answer 5 questions only" or "Write chemical equations" are general instructions. Use them to set "requiredQuestionsCount", but **DO NOT** include them as a question in the "questions" array.
     - If a Question has Branches, the Question text is just a header.
     - If a Branch has Points, the Branch text is just a header.
     - ONLY the leaf nodes should have an "answer" field.
