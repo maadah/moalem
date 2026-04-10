@@ -364,26 +364,31 @@ export async function gradeStudentPaper(
   collectIds(questions);
 
   // Flatten questions for the AI to make mapping easier and more accurate
+  // We only send leaf nodes (the actual questions to be graded)
   const flattenedQuestions: any[] = [];
-  const flatten = (qs: Question[], path: string = "") => {
+  const leafQuestionIds = new Set<string>();
+
+  const flatten = (qs: Question[], parentText: string = "", path: string = "") => {
     qs.forEach((q, index) => {
       // Try to extract a clean label (e.g., "س1" or "أ")
       let label = q.text.split(/[:\-\.]/)[0].trim();
       if (label.length > 10) label = `Item ${index + 1}`;
       
       const fullPath = path ? `${path} / ${label}` : label;
+      const combinedText = parentText ? `${parentText} - ${q.text}` : q.text;
       
       if (!q.subQuestions || q.subQuestions.length === 0) {
         flattenedQuestions.push({
           id: q.id,
           label: fullPath,
-          text: q.text,
+          text: combinedText,
           modelAnswer: q.answer,
           maxGrade: q.grade,
           type: q.type
         });
+        leafQuestionIds.add(q.id);
       } else {
-        flatten(q.subQuestions, fullPath);
+        flatten(q.subQuestions, combinedText, fullPath);
       }
     });
   };
@@ -441,17 +446,18 @@ export async function gradeStudentPaper(
       
       INSTRUCTIONS:
       1. Analyze the provided images (Batch ${currentBatchIndex} of ${totalBatches}).
-      2. Each student's paper might span one or more images. 
-      3. Extract the student's name exactly as written.
-      4. **STRICT QUESTION MAPPING**: You MUST ONLY grade the questions listed in the "EXAM QUESTIONS" section above. 
-      5. **MATCH IDs**: You MUST use the exact "id" from the list provided above for each grading result.
-      6. If a student writes a question label like "Q2 A", match it to the corresponding "label" in the list (e.g., "س2 / أ").
-      7. **DO NOT CREATE NEW QUESTIONS**: Under no circumstances should you include a "questionId" in the output that is not present in the provided list.
-      8. **STUDENT ANSWER EXTRACTION**: You MUST extract the FULL text of the student's handwritten answer for each question and put it in the "studentAnswer" field. This must be a VERBATIM transcription.
-      9. **ARABIC FEEDBACK ONLY**: You MUST provide all feedback and student names in Arabic language only.
-      10. **CONCISE FEEDBACK**: Provide very short, constructive feedback (max 15 words per question).
-      11. Calculate the total grade for the student.
-      12. **CRITICAL**: Ensure all strings are properly escaped for JSON.
+      2. **STRICT QUESTION MAPPING**: You MUST ONLY grade the questions listed in the "EXAM QUESTIONS" section above. 
+      3. **MATCH IDs**: You MUST use the exact "id" from the list provided above for each grading result.
+      4. **HIERARCHY HANDLING**: 
+         - The "label" field (e.g., "س2 / A") tells you which question and branch it is.
+         - If a student writes "س2" followed by "A", map the answer for "A" to the ID associated with label "س2 / A".
+         - DO NOT create a separate grading entry for the parent header "س2" if it's not in the list.
+      5. **DO NOT HALLUCINATE**: Under no circumstances should you include a "questionId" in the output that is not present in the provided list. If there are only 7 items in the list, you should have at most 7 grading results per student.
+      6. **STUDENT ANSWER EXTRACTION**: You MUST extract the FULL text of the student's handwritten answer for each question and put it in the "studentAnswer" field. This must be a VERBATIM transcription.
+      7. **ARABIC FEEDBACK ONLY**: You MUST provide all feedback and student names in Arabic language only.
+      8. **CONCISE FEEDBACK**: Provide very short, constructive feedback (max 15 words per question).
+      9. Calculate the total grade for the student.
+      10. **CRITICAL**: Ensure all strings are properly escaped for JSON.
     `;
 
     const imageParts = batch.map((base64) => ({
@@ -463,10 +469,10 @@ export async function gradeStudentPaper(
 
     try {
       const result = await ai.models.generateContent({
-        model: "gemini-3-flash-preview", // Switched to Flash for speed and stability
+        model: "gemini-3-flash-preview", 
         contents: [{ role: "user", parts: [...imageParts, { text: prompt }] }],
         config: {
-          systemInstruction: "You are a professional Arabic teacher. All your feedback and communication must be in Arabic.",
+          systemInstruction: "You are a professional Arabic teacher. All your feedback and communication must be in Arabic. Strictly follow the provided question IDs.",
           responseMimeType: "application/json",
           responseSchema: gradingSchema
         },
@@ -501,11 +507,24 @@ export async function gradeStudentPaper(
       }
       
       if (parsed.results && Array.isArray(parsed.results)) {
-        // Filter out hallucinated question IDs
-        const filteredResults = parsed.results.map((student: any) => ({
-          ...student,
-          gradings: (student.gradings || []).filter((g: any) => validQuestionIds.has(g.questionId))
-        })).filter((student: any) => student.gradings.length > 0);
+        // Filter out hallucinated question IDs - ONLY allow IDs from the leafQuestionIds set
+        const filteredResults = parsed.results.map((student: any) => {
+          const gradings = student.gradings || [];
+          const uniqueGradings: any[] = [];
+          const seenIds = new Set<string>();
+
+          gradings.forEach((g: any) => {
+            if (leafQuestionIds.has(g.questionId) && !seenIds.has(g.questionId)) {
+              uniqueGradings.push(g);
+              seenIds.add(g.questionId);
+            }
+          });
+
+          return {
+            ...student,
+            gradings: uniqueGradings
+          };
+        }).filter((student: any) => student.gradings.length > 0);
         
         allResults.push(...filteredResults);
       }
