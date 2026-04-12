@@ -28,10 +28,22 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-type View = 'dashboard' | 'create-exam' | 'grade-papers' | 'results';
+type View = 'dashboard' | 'create-exam' | 'grade-papers' | 'results' | 'admin';
+
+interface UserProfile {
+  uid: string;
+  email: string;
+  displayName: string;
+  status: 'pending' | 'approved' | 'rejected';
+  role: 'admin' | 'user';
+  pageLimit: number;
+  pagesUsed: number;
+  createdAt: any;
+}
 
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [view, setView] = useState<View>('dashboard');
   const [loading, setLoading] = useState(true);
   const [exams, setExams] = useState<any[]>([]);
@@ -41,12 +53,49 @@ export default function App() {
   const [sessions, setSessions] = useState<any[]>([]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
+      if (u) {
+        // Fetch or create user profile
+        const userDoc = await getDoc(doc(db, 'users', u.uid));
+        if (userDoc.exists()) {
+          setUserProfile(userDoc.data() as UserProfile);
+        } else {
+          const newProfile: UserProfile = {
+            uid: u.uid,
+            email: u.email || '',
+            displayName: u.displayName || '',
+            status: u.email === 'asmaomar5566@gmail.com' ? 'approved' : 'pending',
+            role: u.email === 'asmaomar5566@gmail.com' ? 'admin' : 'user',
+            pageLimit: 500,
+            pagesUsed: 0,
+            createdAt: serverTimestamp()
+          };
+          await updateDoc(doc(db, 'users', u.uid), newProfile as any).catch(async () => {
+            // If update fails (doc doesn't exist), use setDoc via addDoc logic or just direct set
+            // But rules allow create for self if status is pending
+            const { setDoc } = await import('firebase/firestore');
+            await setDoc(doc(db, 'users', u.uid), newProfile);
+          });
+          setUserProfile(newProfile);
+        }
+      } else {
+        setUserProfile(null);
+      }
       setLoading(false);
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const unsubscribe = onSnapshot(doc(db, 'users', user.uid), (snapshot) => {
+      if (snapshot.exists()) {
+        setUserProfile(snapshot.data() as UserProfile);
+      }
+    });
+    return () => unsubscribe();
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -125,6 +174,67 @@ export default function App() {
     );
   }
 
+  if (userProfile?.status === 'pending') {
+    return (
+      <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-4" dir="rtl">
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-lg w-full bg-white p-10 rounded-3xl shadow-xl border border-stone-200 text-center space-y-6"
+        >
+          <div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
+            <Loader2 className="w-10 h-10 text-amber-600 animate-spin" />
+          </div>
+          <h2 className="text-2xl font-bold text-stone-900">طلبك قيد المراجعة</h2>
+          <p className="text-stone-600 leading-relaxed">
+            مرحباً بك في المصحح الذكي. حسابك حالياً قيد الانتظار لحين موافقة مسؤول المشروع.
+            <br />
+            يرجى التواصل مع الإدارة لتفعيل حسابك وتحديد باقة الصفحات الخاصة بك.
+          </p>
+          
+          <div className="bg-stone-50 p-6 rounded-2xl space-y-4 border border-stone-100">
+            <p className="font-bold text-stone-700">للتواصل والتفعيل:</p>
+            <div className="flex flex-col gap-3">
+              <a 
+                href="tel:07706118992" 
+                className="flex items-center justify-center gap-2 text-emerald-600 font-bold text-xl hover:underline"
+              >
+                07706118992
+              </a>
+              <a 
+                href="https://wa.me/9647706118992" 
+                target="_blank" 
+                rel="noreferrer"
+                className="bg-emerald-500 text-white py-3 rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-emerald-600 transition-colors"
+              >
+                تواصل عبر واتساب
+              </a>
+            </div>
+          </div>
+
+          <button onClick={logout} className="text-stone-400 hover:text-red-500 transition-colors text-sm">
+            تسجيل الخروج
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  if (userProfile?.status === 'rejected') {
+    return (
+      <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-4" dir="rtl">
+        <div className="max-w-md w-full bg-white p-8 rounded-3xl shadow-xl border border-stone-200 text-center">
+          <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-stone-900 mb-2">تم رفض الطلب</h2>
+          <p className="text-stone-500 mb-6">عذراً، تم رفض طلب انضمامك للمشروع. يرجى التواصل مع الإدارة للمزيد من التفاصيل.</p>
+          <button onClick={logout} className="w-full bg-stone-900 text-white py-3 rounded-xl font-medium">
+            تسجيل الخروج
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-stone-50 text-stone-900 font-sans" dir="rtl">
       {/* Navigation */}
@@ -141,9 +251,27 @@ export default function App() {
               <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<LayoutGrid className="w-4 h-4" />} label="لوحة التحكم" />
               <NavButton active={view === 'create-exam'} onClick={() => setView('create-exam')} icon={<Plus className="w-4 h-4" />} label="إنشاء امتحان" />
               <NavButton active={view === 'results'} onClick={() => setView('results')} icon={<List className="w-4 h-4" />} label="النتائج" />
+              {userProfile?.role === 'admin' && (
+                <NavButton active={view === 'admin'} onClick={() => setView('admin')} icon={<Users className="w-4 h-4" />} label="الإدارة" />
+              )}
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <div className="hidden lg:flex flex-col items-end mr-2">
+              <span className="text-[10px] text-stone-400">استهلاك الصفحات</span>
+              <div className="flex items-center gap-2">
+                <div className="w-24 h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                  <div 
+                    className={cn(
+                      "h-full transition-all",
+                      (userProfile?.pagesUsed || 0) / (userProfile?.pageLimit || 1) > 0.9 ? "bg-red-500" : "bg-emerald-500"
+                    )}
+                    style={{ width: `${Math.min(100, ((userProfile?.pagesUsed || 0) / (userProfile?.pageLimit || 1)) * 100)}%` }}
+                  />
+                </div>
+                <span className="text-[10px] font-bold text-stone-600">{userProfile?.pagesUsed} / {userProfile?.pageLimit}</span>
+              </div>
+            </div>
             <button 
               onClick={() => {
                 if(confirm('هل تريد مسح مفتاح API المحفوظ؟ سيطلب منك التطبيق إدخاله مرة أخرى عند التصحيح القادم.')) {
@@ -181,6 +309,7 @@ export default function App() {
           {view === 'create-exam' && (
             <ExamCreator 
               user={user} 
+              userProfile={userProfile}
               initialData={editingExam}
               onSave={() => { setEditingExam(null); setView('dashboard'); }} 
               onCancel={() => { setEditingExam(null); setView('dashboard'); }} 
@@ -189,6 +318,7 @@ export default function App() {
           {view === 'grade-papers' && (
             <Grader 
               user={user}
+              userProfile={userProfile}
               exam={selectedExam} 
               onComplete={() => setView('results')}
               onCancel={() => setView('dashboard')}
@@ -202,9 +332,166 @@ export default function App() {
               onBack={() => setView('dashboard')}
             />
           )}
+          {view === 'admin' && userProfile?.role === 'admin' && (
+            <AdminDashboard />
+          )}
         </AnimatePresence>
       </main>
     </div>
+  );
+}
+
+function AdminDashboard() {
+  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const q = query(collection(db, 'users'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setUsers(snapshot.docs.map(doc => doc.data() as UserProfile));
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const updateUserStatus = async (uid: string, status: 'approved' | 'rejected') => {
+    await updateDoc(doc(db, 'users', uid), { status });
+  };
+
+  const updateUserLimit = async (uid: string, limit: number) => {
+    await updateDoc(doc(db, 'users', uid), { pageLimit: limit });
+  };
+
+  const deleteUser = async (uid: string) => {
+    if (confirm('هل أنت متأكد من حذف هذا المستخدم نهائياً؟')) {
+      await deleteDoc(doc(db, 'users', uid));
+    }
+  };
+
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-emerald-600" /></div>;
+
+  const pendingUsers = users.filter(u => u.status === 'pending');
+  const activeUsers = users.filter(u => u.status === 'approved' && u.role !== 'admin');
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-8"
+    >
+      <div className="flex items-center justify-between">
+        <h2 className="text-3xl font-bold font-serif italic">لوحة تحكم المدير</h2>
+        <div className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-sm font-bold">
+          إجمالي المستخدمين: {users.length}
+        </div>
+      </div>
+
+      {pendingUsers.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="text-xl font-bold text-amber-600 flex items-center gap-2">
+            <Loader2 className="w-5 h-5 animate-spin" />
+            طلبات انضمام جديدة ({pendingUsers.length})
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {pendingUsers.map(u => (
+              <div key={u.uid} className="bg-white p-6 rounded-3xl border border-amber-200 shadow-sm flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-stone-100 rounded-full flex items-center justify-center font-bold text-stone-400">
+                    {u.displayName?.charAt(0) || u.email.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="font-bold">{u.displayName || 'بدون اسم'}</p>
+                    <p className="text-xs text-stone-400">{u.email}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => updateUserStatus(u.uid, 'approved')}
+                    className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors"
+                  >
+                    قبول
+                  </button>
+                  <button 
+                    onClick={() => updateUserStatus(u.uid, 'rejected')}
+                    className="bg-red-50 text-red-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-red-100 transition-colors"
+                  >
+                    رفض
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <h3 className="text-xl font-bold">المستخدمين النشطين</h3>
+        <div className="bg-white rounded-3xl border border-stone-200 overflow-hidden shadow-sm">
+          <table className="w-full text-right">
+            <thead className="bg-stone-50 border-b border-stone-200">
+              <tr>
+                <th className="px-6 py-4 text-sm font-bold text-stone-500">المستخدم</th>
+                <th className="px-6 py-4 text-sm font-bold text-stone-500">الاستهلاك</th>
+                <th className="px-6 py-4 text-sm font-bold text-stone-500">الحد المسموح</th>
+                <th className="px-6 py-4 text-sm font-bold text-stone-500">الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-stone-100">
+              {activeUsers.map(u => (
+                <tr key={u.uid} className="hover:bg-stone-50 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-stone-100 rounded-full flex items-center justify-center text-xs font-bold text-stone-400">
+                        {u.displayName?.charAt(0) || u.email.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="text-sm font-bold">{u.displayName || 'بدون اسم'}</p>
+                        <p className="text-[10px] text-stone-400">{u.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-20 h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                        <div 
+                          className={cn("h-full", u.pagesUsed / u.pageLimit > 0.9 ? "bg-red-500" : "bg-emerald-500")}
+                          style={{ width: `${Math.min(100, (u.pagesUsed / u.pageLimit) * 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-xs font-bold">{u.pagesUsed} صفحة</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <select 
+                      value={u.pageLimit}
+                      onChange={(e) => updateUserLimit(u.uid, Number(e.target.value))}
+                      className="bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-200 text-xs outline-none focus:ring-2 focus:ring-emerald-500"
+                    >
+                      {[500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 6000, 7000, 8000, 9000, 10000].map(val => (
+                        <option key={val} value={val}>{val} صفحة</option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-6 py-4">
+                    <button 
+                      onClick={() => deleteUser(u.uid)}
+                      className="text-red-400 hover:text-red-600 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {activeUsers.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-6 py-10 text-center text-stone-400 text-sm italic">لا يوجد مستخدمين نشطين حالياً</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </motion.div>
   );
 }
 
@@ -412,7 +699,7 @@ function Dashboard({ exams, onNewExam, onGrade, onEditExam, onDeleteExam }: any)
   );
 }
 
-function ExamCreator({ user, initialData, onSave, onCancel }: any) {
+function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) {
   const [title, setTitle] = useState(initialData?.title || '');
   const [duration, setDuration] = useState(initialData?.duration || '');
   const [study, setStudy] = useState(initialData?.study || 'الإعدادية / العلمي');
@@ -498,6 +785,13 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
       if (result.requiredQuestionsCount) setRequiredQuestionsCount(result.requiredQuestionsCount);
       
       if (result.questions && result.questions.length > 0) {
+        // Update user pagesUsed
+        if (userProfile) {
+          await updateDoc(doc(db, 'users', user.uid), {
+            pagesUsed: (userProfile.pagesUsed || 0) + extractionImages.length
+          });
+        }
+
         // Ensure all questions have IDs
         const ensureIds = (qs: Question[]): Question[] => {
           return qs.map(q => ({
@@ -758,7 +1052,13 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
         </h2>
         <div className="flex gap-3">
           <button 
-            onClick={() => extractionInputRef.current?.click()}
+            onClick={() => {
+              if (userProfile && (userProfile.pagesUsed + extractionImages.length) > userProfile.pageLimit) {
+                alert(`عذراً، لقد تجاوزت الحد المسموح به من الصفحات (${userProfile.pageLimit}). يرجى التواصل مع الإدارة لزيادة الحد.`);
+                return;
+              }
+              extractionInputRef.current?.click();
+            }}
             className="px-6 py-2 rounded-xl bg-stone-100 text-stone-900 flex items-center gap-2 hover:bg-stone-200 transition-all"
             title="رفع من الجهاز"
           >
@@ -766,7 +1066,13 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
             استخراج من صور
           </button>
           <button 
-            onClick={() => extractionCameraInputRef.current?.click()}
+            onClick={() => {
+              if (userProfile && (userProfile.pagesUsed + extractionImages.length) > userProfile.pageLimit) {
+                alert(`عذراً، لقد تجاوزت الحد المسموح به من الصفحات (${userProfile.pageLimit}). يرجى التواصل مع الإدارة لزيادة الحد.`);
+                return;
+              }
+              extractionCameraInputRef.current?.click();
+            }}
             className="px-6 py-2 rounded-xl bg-stone-100 text-stone-900 flex items-center gap-2 hover:bg-stone-200 transition-all"
             title="فتح الكاميرا"
           >
@@ -1431,7 +1737,7 @@ function ExamCreator({ user, initialData, onSave, onCancel }: any) {
   );
 }
 
-function Grader({ user, exam, onComplete, onCancel }: any) {
+function Grader({ user, userProfile, exam, onComplete, onCancel }: any) {
   const [images, setImages] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [isGrading, setIsGrading] = useState(false);
@@ -1452,6 +1758,12 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
 
   const startGrading = async () => {
     if (images.length === 0) return alert('يرجى رفع صور أوراق الطلاب');
+    
+    // Check usage limit
+    if (userProfile && (userProfile.pagesUsed + images.length) > userProfile.pageLimit) {
+      return alert(`عذراً، لقد تجاوزت الحد المسموح به من الصفحات (${userProfile.pageLimit}). يرجى التواصل مع الإدارة لزيادة الحد.`);
+    }
+
     setIsGrading(true);
     setProgress({ current: 0, total: images.length, phase: 'compressing' });
     try {
@@ -1465,6 +1777,14 @@ function Grader({ user, exam, onComplete, onCancel }: any) {
       if (!results || results.length === 0) {
         throw new Error("لم يتم العثور على نتائج في الأوراق المرفوعة. تأكد من وضوح الصور وجودة الخط.");
       }
+
+      // Update user pagesUsed
+      if (userProfile) {
+        await updateDoc(doc(db, 'users', user.uid), {
+          pagesUsed: (userProfile.pagesUsed || 0) + images.length
+        });
+      }
+
       setGradingResults(results);
       setCurrentResultIndex(0);
     } catch (e: any) {

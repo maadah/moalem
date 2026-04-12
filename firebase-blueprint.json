@@ -65,6 +65,22 @@
         "authorUid": { "type": "string" }
       },
       "required": ["examId", "examTitle", "studentCount", "authorUid"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Represents a user of the system and their usage limits.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"] },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "pageLimit": { "type": "number" },
+        "pagesUsed": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "status", "role", "pageLimit", "pagesUsed"]
     }
   },
   "firestore": {
@@ -79,6 +95,10 @@
     "/sessions/{sessionId}": {
       "schema": "GradingSession",
       "description": "Collection of grading sessions (batches)."
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Collection of user profiles and permissions."
     }
   }
 }

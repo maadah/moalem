@@ -32,6 +32,18 @@
 //   - createdAt: timestamp (required)
 //   - authorUid: string (required)
 //
+// Collection: users
+// Document ID: user UID
+// Fields:
+//   - uid: string (required)
+//   - email: string (required)
+//   - displayName: string (optional)
+//   - status: string (required, enum: ['pending', 'approved', 'rejected'])
+//   - role: string (required, enum: ['admin', 'user'])
+//   - pageLimit: number (required)
+//   - pagesUsed: number (required)
+//   - createdAt: timestamp (required)
+//
 // ===============================================================
 
 rules_version = '2';
@@ -44,6 +56,18 @@ service cloud.firestore {
 
     function isAuthenticated() {
       return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
+         request.auth.token.email == "asmaomar5566@gmail.com");
+    }
+
+    function isApproved() {
+      return isAuthenticated() && 
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved' || 
+         isAdmin());
     }
 
     function isOwner(authorUid) {
@@ -72,29 +96,50 @@ service cloud.firestore {
              data.authorUid == request.auth.uid;
     }
 
+    function isValidUser(data) {
+      return data.uid is string &&
+             data.email is string &&
+             data.status in ['pending', 'approved', 'rejected'] &&
+             data.role in ['admin', 'user'] &&
+             data.pageLimit is number &&
+             data.pagesUsed is number;
+    }
+
     // ===============================================================
     // Rules
     // ===============================================================
 
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow create: if isAuthenticated() && request.auth.uid == userId && 
+                    request.resource.data.status == 'pending' && 
+                    request.resource.data.role == 'user' &&
+                    request.resource.data.pageLimit == 500 &&
+                    request.resource.data.pagesUsed == 0;
+      allow update: if isAdmin() || (isOwner(userId) && 
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pagesUsed', 'displayName']));
+      allow delete: if isAdmin();
+    }
+
     match /exams/{examId} {
-      allow read: if isOwner(resource.data.authorUid);
-      allow create: if isAuthenticated() && isValidExam(request.resource.data);
+      allow read: if isOwner(resource.data.authorUid) || isAdmin();
+      allow create: if isApproved() && isValidExam(request.resource.data);
       allow update: if isOwner(resource.data.authorUid) && isValidExam(request.resource.data);
-      allow delete: if isOwner(resource.data.authorUid);
+      allow delete: if isOwner(resource.data.authorUid) || isAdmin();
     }
 
     match /results/{resultId} {
-      allow read: if isOwner(resource.data.authorUid);
-      allow create: if isAuthenticated() && isValidResult(request.resource.data);
+      allow read: if isOwner(resource.data.authorUid) || isAdmin();
+      allow create: if isApproved() && isValidResult(request.resource.data);
       allow update: if isOwner(resource.data.authorUid) && isValidResult(request.resource.data);
-      allow delete: if isOwner(resource.data.authorUid);
+      allow delete: if isOwner(resource.data.authorUid) || isAdmin();
     }
 
     match /sessions/{sessionId} {
-      allow read: if isOwner(resource.data.authorUid);
-      allow create: if isAuthenticated() && isValidSession(request.resource.data);
+      allow read: if isOwner(resource.data.authorUid) || isAdmin();
+      allow create: if isApproved() && isValidSession(request.resource.data);
       allow update: if isOwner(resource.data.authorUid) && isValidSession(request.resource.data);
-      allow delete: if isOwner(resource.data.authorUid);
+      allow delete: if isOwner(resource.data.authorUid) || isAdmin();
     }
   }
 }
