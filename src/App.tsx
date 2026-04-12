@@ -13,7 +13,8 @@ import {
 } from 'firebase/auth';
 import { 
   collection, addDoc, query, where, onSnapshot, 
-  serverTimestamp, doc, updateDoc, deleteDoc, getDoc
+  serverTimestamp, doc, updateDoc, deleteDoc, getDoc, setDoc,
+  getDocFromServer
 } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 import { auth, db, storage } from './firebase';
@@ -53,36 +54,50 @@ export default function App() {
   const [sessions, setSessions] = useState<any[]>([]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
-      setUser(u);
-      if (u) {
-        // Fetch or create user profile
-        const userDoc = await getDoc(doc(db, 'users', u.uid));
-        if (userDoc.exists()) {
-          setUserProfile(userDoc.data() as UserProfile);
-        } else {
-          const newProfile: UserProfile = {
-            uid: u.uid,
-            email: u.email || '',
-            displayName: u.displayName || '',
-            status: u.email === 'asmaomar5566@gmail.com' ? 'approved' : 'pending',
-            role: u.email === 'asmaomar5566@gmail.com' ? 'admin' : 'user',
-            pageLimit: 500,
-            pagesUsed: 0,
-            createdAt: serverTimestamp()
-          };
-          await updateDoc(doc(db, 'users', u.uid), newProfile as any).catch(async () => {
-            // If update fails (doc doesn't exist), use setDoc via addDoc logic or just direct set
-            // But rules allow create for self if status is pending
-            const { setDoc } = await import('firebase/firestore');
-            await setDoc(doc(db, 'users', u.uid), newProfile);
-          });
-          setUserProfile(newProfile);
+    // Test connection
+    const testConnection = async () => {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Firestore is offline. Check configuration.");
         }
-      } else {
-        setUserProfile(null);
       }
-      setLoading(false);
+    };
+    testConnection();
+
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
+      try {
+        setUser(u);
+        if (u) {
+          // Fetch or create user profile
+          const userDocRef = doc(db, 'users', u.uid);
+          const userDoc = await getDoc(userDocRef);
+          
+          if (userDoc.exists()) {
+            setUserProfile(userDoc.data() as UserProfile);
+          } else {
+            const newProfile: UserProfile = {
+              uid: u.uid,
+              email: u.email || '',
+              displayName: u.displayName || '',
+              status: u.email === 'asmaomar5566@gmail.com' ? 'approved' : 'pending',
+              role: u.email === 'asmaomar5566@gmail.com' ? 'admin' : 'user',
+              pageLimit: 500,
+              pagesUsed: 0,
+              createdAt: serverTimestamp()
+            };
+            await setDoc(userDocRef, newProfile);
+            setUserProfile(newProfile);
+          }
+        } else {
+          setUserProfile(null);
+        }
+      } catch (error) {
+        console.error("Auth state error:", error);
+      } finally {
+        setLoading(false);
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -98,31 +113,31 @@ export default function App() {
   }, [user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || userProfile?.status !== 'approved') return;
     const q = query(collection(db, 'exams'), where('authorUid', '==', user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setExams(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    }, (error) => console.error("Exams snapshot error:", error));
     return () => unsubscribe();
-  }, [user]);
+  }, [user, userProfile?.status]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || userProfile?.status !== 'approved') return;
     const q = query(collection(db, 'results'), where('authorUid', '==', user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setResults(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    }, (error) => console.error("Results snapshot error:", error));
     return () => unsubscribe();
-  }, [user]);
+  }, [user, userProfile?.status]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || userProfile?.status !== 'approved') return;
     const q = query(collection(db, 'sessions'), where('authorUid', '==', user.uid));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setSessions(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    }, (error) => console.error("Sessions snapshot error:", error));
     return () => unsubscribe();
-  }, [user]);
+  }, [user, userProfile?.status]);
 
   const login = async () => {
     try {
