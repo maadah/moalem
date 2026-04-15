@@ -16,7 +16,7 @@ import {
   serverTimestamp, doc, updateDoc, deleteDoc, getDoc, setDoc,
   getDocFromServer
 } from 'firebase/firestore';
-import { ref, uploadString, getDownloadURL } from 'firebase/storage';
+import { ref, uploadString, getDownloadURL, uploadBytes } from 'firebase/storage';
 import { auth, db, storage } from './firebase';
 import { Question, gradeStudentPaper, extractExamFromImages } from './services/geminiService';
 import jsPDF from 'jspdf';
@@ -960,6 +960,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
   const [requiredQuestionsCount, setRequiredQuestionsCount] = useState<number | null>(initialData?.requiredQuestionsCount || null);
   const [questions, setQuestions] = useState<Question[]>(initialData?.questions || []);
   const [isSaving, setIsSaving] = useState(false);
+  const [savingStatus, setSavingStatus] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [showPrintMenu, setShowPrintMenu] = useState(false);
@@ -972,53 +973,78 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
 
   const uploadImageToStorage = async (base64: string, path: string) => {
     if (!base64 || !base64.startsWith('data:image')) return base64;
+    
+    setSavingStatus('جاري رفع الصور...');
+    console.log(`[Storage] Starting upload to: ${path}`);
     try {
       const storageRef = ref(storage, path);
-      await uploadString(storageRef, base64, 'data_url');
-      return await getDownloadURL(storageRef);
+      
+      // Convert base64 to Blob for more reliable upload
+      const response = await fetch(base64);
+      const blob = await response.blob();
+      
+      // Add a timeout to the upload
+      const uploadPromise = uploadBytes(storageRef, blob);
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Upload timeout')), 45000)
+      );
+      
+      await Promise.race([uploadPromise, timeoutPromise]);
+      
+      const url = await getDownloadURL(storageRef);
+      console.log(`[Storage] Upload successful: ${url}`);
+      return url;
     } catch (error) {
-      console.error('Error uploading image:', error);
-      return base64; // Fallback to base64 if upload fails
+      console.error(`[Storage] Error uploading image to ${path}:`, error);
+      // Fallback to base64 so the save can at least attempt to proceed
+      return base64; 
     }
   };
 
   const processQuestionsForStorage = async (qs: Question[]): Promise<Question[]> => {
-    if (!qs) return [];
+    if (!qs || qs.length === 0) return [];
     
-    return Promise.all(qs.map(async (q) => {
+    const processed = [];
+    console.log(`[Storage] Processing ${qs.length} questions...`);
+    
+    let count = 0;
+    for (const q of qs) {
+      count++;
+      setSavingStatus(`جاري معالجة السؤال ${count} من ${qs.length}...`);
       const newQ = { ...q };
-      const tasks: Promise<void>[] = [];
       
-      // Process question image if it's a new base64 image
+      // 1. Process sub-questions recursively
+      if (q.subQuestions && q.subQuestions.length > 0) {
+        newQ.subQuestions = await processQuestionsForStorage(q.subQuestions);
+      } else {
+        newQ.subQuestions = [];
+      }
+      
+      // 2. Upload images for the current question in parallel
+      const uploadTasks = [];
+      
       if (q.questionImage && q.questionImage.startsWith('data:image')) {
-        tasks.push(
+        uploadTasks.push(
           uploadImageToStorage(q.questionImage, `exams/${user.uid}/${q.id}_q_${Date.now()}`)
             .then(url => { newQ.questionImage = url; })
         );
       }
       
-      // Process answer image if it's a new base64 image
       if (q.answerImage && q.answerImage.startsWith('data:image')) {
-        tasks.push(
+        uploadTasks.push(
           uploadImageToStorage(q.answerImage, `exams/${user.uid}/${q.id}_a_${Date.now()}`)
             .then(url => { newQ.answerImage = url; })
         );
       }
       
-      // Process sub-questions recursively
-      if (q.subQuestions && q.subQuestions.length > 0) {
-        tasks.push(
-          processQuestionsForStorage(q.subQuestions)
-            .then(processedSub => { newQ.subQuestions = processedSub; })
-        );
+      if (uploadTasks.length > 0) {
+        await Promise.all(uploadTasks);
       }
       
-      if (tasks.length > 0) {
-        await Promise.all(tasks);
-      }
-      
-      return newQ;
-    }));
+      processed.push(newQ);
+    }
+    
+    return processed;
   };
 
   const handleExtractionFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1224,9 +1250,11 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
   const saveExam = async () => {
     if (!title || questions.length === 0) return alert('يرجى إدخال عنوان الامتحان وسؤال واحد على الأقل');
     setIsSaving(true);
+    setSavingStatus('جاري التحضير للحفظ...');
     try {
       const processedQuestions = await processQuestionsForStorage(questions);
       
+      setSavingStatus('جاري حفظ البيانات في قاعدة البيانات...');
       const examData = {
         title,
         duration,
@@ -1429,7 +1457,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
             className="px-6 py-2 rounded-xl bg-emerald-600 text-white flex items-center gap-2 hover:bg-emerald-700 disabled:opacity-50"
           >
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            حفظ الامتحان
+            {isSaving ? (savingStatus || 'جاري الحفظ...') : 'حفظ الامتحان'}
           </button>
         </div>
       </div>
