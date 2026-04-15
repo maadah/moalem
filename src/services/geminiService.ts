@@ -46,6 +46,130 @@ const getApiKey = () => {
   return localStorage.getItem('GEMINI_API_KEY_AUTO') || '';
 };
 
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  initialDelay: number = 1000
+): Promise<T> {
+  let lastError: any;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      const isRetryable = 
+        error.message?.includes('503') || 
+        error.message?.includes('500') || 
+        error.message?.includes('429') || 
+        error.message?.includes('quota') ||
+        error.message?.includes('high demand') ||
+        error.message?.includes('UNAVAILABLE');
+
+      if (!isRetryable || i === maxRetries - 1) throw error;
+      
+      const delay = initialDelay * Math.pow(2, i);
+      console.warn(`Retryable error occurred (attempt ${i + 1}/${maxRetries}). Retrying in ${delay}ms...`, error.message);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  throw lastError;
+}
+
+function robustJsonParse(text: string): any {
+  if (!text) return null;
+  
+  // 1. Try direct parse
+  try {
+    return JSON.parse(text);
+  } catch (e) {
+    console.warn("Initial JSON parse failed, attempting cleaning...");
+  }
+
+  // 2. Clean common markdown and control characters
+  let cleaned = text.trim();
+  cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+  
+  // Handle unescaped newlines and control characters
+  cleaned = cleaned.replace(/[\u0000-\u001F\u007F-\u009F]/g, (match) => {
+    if (match === '\n') return '\\n';
+    if (match === '\r') return '\\r';
+    if (match === '\t') return '\\t';
+    return '';
+  });
+
+  // 3. Try parsing cleaned version
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    console.warn("Cleaned JSON parse failed, attempting structural repair...");
+  }
+
+  // 4. Structural repair for truncated JSON
+  // Balance braces and brackets
+  let openBraces = (cleaned.match(/\{/g) || []).length;
+  let closeBraces = (cleaned.match(/\}/g) || []).length;
+  let openBrackets = (cleaned.match(/\[/g) || []).length;
+  let closeBrackets = (cleaned.match(/\]/g) || []).length;
+
+  // If it's cut off inside a string, close the string first
+  const quoteMatches = cleaned.match(/"/g);
+  if (quoteMatches && quoteMatches.length % 2 !== 0) {
+    cleaned += '"';
+  }
+
+  // Close open structures in reverse order
+  // We'll use a stack-based approach for better accuracy
+  const stack: string[] = [];
+  for (let i = 0; i < cleaned.length; i++) {
+    if (cleaned[i] === '{') stack.push('}');
+    else if (cleaned[i] === '[') stack.push(']');
+    else if (cleaned[i] === '}' || cleaned[i] === ']') {
+      if (stack.length > 0 && stack[stack.length - 1] === cleaned[i]) {
+        stack.pop();
+      }
+    }
+  }
+  
+  while (stack.length > 0) {
+    cleaned += stack.pop();
+  }
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (e) {
+    console.error("Structural repair failed. Last resort: partial extraction.");
+  }
+
+  // 5. Last resort: partial extraction of the results array
+  try {
+    const resultsMatch = cleaned.match(/"results"\s*:\s*\[/);
+    if (resultsMatch) {
+      const startIndex = resultsMatch.index!;
+      let partial = "{" + cleaned.substring(startIndex);
+      
+      // Balance this partial string
+      const pStack: string[] = [];
+      for (let i = 0; i < partial.length; i++) {
+        if (partial[i] === '{') pStack.push('}');
+        else if (partial[i] === '[') pStack.push(']');
+        else if (partial[i] === '}' || partial[i] === ']') {
+          if (pStack.length > 0 && pStack[pStack.length - 1] === partial[i]) {
+            pStack.pop();
+          }
+        }
+      }
+      while (pStack.length > 0) {
+        partial += pStack.pop();
+      }
+      return JSON.parse(partial);
+    }
+  } catch (e) {
+    console.error("Partial extraction failed.");
+  }
+
+  throw new Error("فشل في تحليل استجابة الذكاء الاصطناعي (JSON Parse Error). يرجى المحاولة مرة أخرى.");
+}
+
 export async function extractExamFromImages(base64Images: string[], apiKey: string): Promise<{ title: string, questions: Question[], requiredQuestionsCount?: number }> {
   const ai = new GoogleGenAI({ apiKey });
   const prompt = `
@@ -159,11 +283,11 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     }
   };
 
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview", // Use Flash for faster, more concise responses to avoid truncation
+  const response = await retryWithBackoff(() => ai.models.generateContent({
+    model: "gemini-1.5-flash", // Use stable Flash model
     contents: { parts: [...imageParts, { text: prompt }] },
     config: {
-      systemInstruction: "You are a professional exam digitizer. Extract ALL questions into a precise JSON structure. Be concise to avoid long responses. Use \n for newlines.",
+      systemInstruction: "You are a professional exam digitizer. Extract ALL questions into a precise JSON structure. Be concise to avoid long responses. Use \\n for newlines.",
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -178,94 +302,9 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
         }
       }
     }
-  });
+  }));
 
-  const text = response.text || '';
-  
-  // Robust JSON parsing with cleaning and truncation repair
-  try {
-    return JSON.parse(text);
-  } catch (innerError) {
-    console.warn("Initial JSON parse failed, attempting repair...", innerError);
-    
-    let cleaned = text.trim();
-    
-    // Remove markdown code blocks if present
-    cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-    
-    // Handle unescaped newlines within strings (common cause of SyntaxError)
-    // We only want to replace newlines that are NOT preceded by a backslash
-    // and are likely inside a JSON string value.
-    // A simpler approach for the repair is to remove control characters first.
-    cleaned = cleaned.replace(/[\u0000-\u001F\u007F-\u009F]/g, (match) => {
-      if (match === '\n') return '\\n';
-      if (match === '\r') return '\\r';
-      if (match === '\t') return '\\t';
-      return '';
-    });
-
-    // Attempt to repair truncated JSON by closing arrays/objects
-    let openBraces = (cleaned.match(/\{/g) || []).length;
-    let closeBraces = (cleaned.match(/\}/g) || []).length;
-    let openBrackets = (cleaned.match(/\[/g) || []).length;
-    let closeBrackets = (cleaned.match(/\]/g) || []).length;
-
-    // If it's cut off inside a string, close the string first
-    const quoteMatches = cleaned.match(/"/g);
-    if (quoteMatches && quoteMatches.length % 2 !== 0) {
-      cleaned += '"';
-    }
-
-    // Close open structures in reverse order
-    // This is a bit tricky, but we'll try to balance them
-    while (openBrackets > closeBrackets || openBraces > closeBraces) {
-      // Find which one was opened last
-      const lastOpenBrace = cleaned.lastIndexOf('{');
-      const lastOpenBracket = cleaned.lastIndexOf('[');
-      
-      if (lastOpenBrace > lastOpenBracket && openBraces > closeBraces) {
-        cleaned += '}';
-        closeBraces++;
-      } else if (openBrackets > closeBrackets) {
-        cleaned += ']';
-        closeBrackets++;
-      } else {
-        break;
-      }
-    }
-    
-    try {
-      return JSON.parse(cleaned);
-    } catch (e2) {
-      console.error("Final JSON parse failed even after repair attempt.", e2);
-      
-      // Last ditch effort: try to find the last complete object in the questions array
-      try {
-        const questionsStart = cleaned.indexOf('"questions":');
-        if (questionsStart !== -1) {
-          const lastValidObject = cleaned.lastIndexOf('}');
-          if (lastValidObject !== -1) {
-            let partial = cleaned.substring(0, lastValidObject + 1);
-            // Ensure we close the array and the root object
-            if (!partial.endsWith(']')) partial += ']';
-            if (!partial.endsWith('}')) partial += '}';
-            // Count again to be sure
-            let pOpenBraces = (partial.match(/\{/g) || []).length;
-            let pCloseBraces = (partial.match(/\}/g) || []).length;
-            while (pOpenBraces > pCloseBraces) {
-              partial += '}';
-              pCloseBraces++;
-            }
-            return JSON.parse(partial);
-          }
-        }
-      } catch (e3) {
-        console.error("Emergency JSON recovery failed.", e3);
-      }
-      
-      throw innerError;
-    }
-  }
+  return robustJsonParse(response.text || '');
 }
 
 async function compressImage(url: string, maxWidth = 2560, maxHeight = 2560, quality = 0.9): Promise<string> {
@@ -468,45 +507,19 @@ export async function gradeStudentPaper(
     }));
 
     try {
-      const result = await ai.models.generateContent({
-        model: "gemini-3-flash-preview", 
+      const result = await retryWithBackoff(() => ai.models.generateContent({
+        model: "gemini-1.5-flash", 
         contents: [{ role: "user", parts: [...imageParts, { text: prompt }] }],
         config: {
-          systemInstruction: "You are a professional Arabic teacher. All your feedback and communication must be in Arabic. Strictly follow the provided question IDs.",
+          systemInstruction: "You are a professional Arabic teacher. All your feedback and communication must be in Arabic. Strictly follow the provided question IDs. Ensure all JSON strings are properly escaped.",
           responseMimeType: "application/json",
           responseSchema: gradingSchema
         },
-      });
+      }));
 
-      const text = result.text || '';
+      const parsed = robustJsonParse(result.text || '');
       
-      // Robust JSON parsing with cleaning and truncation repair
-      let parsed;
-      try {
-        parsed = JSON.parse(text);
-      } catch (innerError) {
-        let cleaned = text
-          .replace(/[\u0000-\u001F\u007F-\u009F]/g, "") 
-          .replace(/```json\n?|```/g, "")
-          .trim();
-        
-        // Attempt to repair truncated JSON by closing arrays/objects
-        if (!cleaned.endsWith('}')) {
-          if (cleaned.includes('"results": [')) {
-            if (!cleaned.endsWith(']')) cleaned += ' ]';
-            cleaned += ' }';
-          }
-        }
-        
-        try {
-          parsed = JSON.parse(cleaned);
-        } catch (e2) {
-          console.error("Final JSON parse failed even after repair attempt.");
-          throw innerError;
-        }
-      }
-      
-      if (parsed.results && Array.isArray(parsed.results)) {
+      if (parsed && parsed.results && Array.isArray(parsed.results)) {
         // Filter out hallucinated question IDs - ONLY allow IDs from the leafQuestionIds set
         const filteredResults = parsed.results.map((student: any) => {
           const gradings = student.gradings || [];
