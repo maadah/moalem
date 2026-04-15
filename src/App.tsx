@@ -14,7 +14,7 @@ import {
 import { 
   collection, addDoc, query, where, onSnapshot, 
   serverTimestamp, doc, updateDoc, deleteDoc, getDoc, setDoc,
-  getDocFromServer
+  getDocFromServer, increment
 } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, uploadBytes } from 'firebase/storage';
 import { auth, db, storage } from './firebase';
@@ -560,6 +560,7 @@ function App() {
               user={user}
               userProfile={userProfile}
               exam={selectedExam} 
+              sessions={sessions}
               onComplete={() => setView('results')}
               onCancel={() => setView('dashboard')}
             />
@@ -2050,15 +2051,27 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
   );
 }
 
-function Grader({ user, userProfile, exam, onComplete, onCancel }: any) {
+function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any) {
   const [images, setImages] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [isGrading, setIsGrading] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, phase: '' });
   const [gradingResults, setGradingResults] = useState<any[]>([]);
   const [currentResultIndex, setCurrentResultIndex] = useState(0);
+  const [targetSessionId, setTargetSessionId] = useState<string>('new');
+  const [newSessionName, setNewSessionName] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  const examSessions = sessions.filter((s: any) => s.examId === exam.id);
+
+  useEffect(() => {
+    if (examSessions.length === 0) {
+      setTargetSessionId('new');
+      const date = new Date().toLocaleDateString('ar-EG', { day: 'numeric', month: 'long' });
+      setNewSessionName(`تصحيح - ${date}`);
+    }
+  }, [examSessions.length]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -2119,18 +2132,23 @@ function Grader({ user, userProfile, exam, onComplete, onCancel }: any) {
 
   const saveAllResults = async () => {
     try {
-      // 1. Create a session document
-      let sessionRef;
-      try {
-        sessionRef = await addDoc(collection(db, 'sessions'), {
+      // 1. Get or Create a session document
+      let sessionId = targetSessionId;
+      
+      if (targetSessionId === 'new') {
+        const sessionRef = await addDoc(collection(db, 'sessions'), {
           examId: exam.id,
           examTitle: exam.title,
+          sessionName: newSessionName || exam.title,
           authorUid: user.uid,
           studentCount: gradingResults.length,
           createdAt: serverTimestamp()
         });
-      } catch (e) {
-        handleFirestoreError(e, OperationType.CREATE, 'sessions');
+        sessionId = sessionRef.id;
+      } else {
+        await updateDoc(doc(db, 'sessions', targetSessionId), {
+          studentCount: increment(gradingResults.length)
+        });
       }
 
       // 2. Save each result with the sessionId
@@ -2140,7 +2158,7 @@ function Grader({ user, userProfile, exam, onComplete, onCancel }: any) {
             studentName: result.studentName,
             gradings: result.gradings,
             totalGrade: result.totalGrade,
-            sessionId: sessionRef.id,
+            sessionId: sessionId,
             examId: exam.id,
             examTitle: exam.title,
             authorUid: user.uid,
@@ -2214,6 +2232,46 @@ function Grader({ user, userProfile, exam, onComplete, onCancel }: any) {
               </div>
             ))}
           </div>
+
+          {/* Folder Selection UI */}
+          <div className="max-w-md mx-auto w-full bg-stone-50 p-6 rounded-2xl border border-stone-100 space-y-4">
+            <div className="flex items-center gap-2 text-stone-600 font-bold mb-2">
+              <Folder className="w-5 h-5" />
+              <span>تنظيم النتائج في مجلد</span>
+            </div>
+            
+            <div className="space-y-3">
+              {examSessions.length > 0 && (
+                <div className="space-y-2">
+                  <label className="text-xs text-stone-400 block mr-1">اختر مجلد موجود أو أنشئ جديداً:</label>
+                  <select 
+                    value={targetSessionId}
+                    onChange={(e) => setTargetSessionId(e.target.value)}
+                    className="w-full p-3 rounded-xl border border-stone-200 bg-white outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                  >
+                    <option value="new">+ إنشاء مجلد جديد</option>
+                    {examSessions.map((s: any) => (
+                      <option key={s.id} value={s.id}>{s.sessionName || s.examTitle} ({s.studentCount} طلاب)</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {targetSessionId === 'new' && (
+                <div className="space-y-2">
+                  <label className="text-xs text-stone-400 block mr-1">اسم المجلد الجديد:</label>
+                  <input 
+                    type="text"
+                    value={newSessionName}
+                    onChange={(e) => setNewSessionName(e.target.value)}
+                    placeholder="مثلاً: تصحيح الشهر الأول"
+                    className="w-full p-3 rounded-xl border border-stone-200 bg-white outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="flex justify-center gap-4">
             <button 
               onClick={() => fileInputRef.current?.click()}
@@ -2552,7 +2610,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
               تحميل كل النتائج (PDF واحد)
             </button>
             <div className="text-right">
-              <h3 className="text-xl font-bold">{selectedSession.examTitle}</h3>
+              <h3 className="text-xl font-bold">{selectedSession.sessionName || selectedSession.examTitle}</h3>
               <p className="text-stone-400 text-sm">{selectedSession.createdAt?.toDate().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
             </div>
           </div>
@@ -2718,7 +2776,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
                 {session.createdAt?.toDate().toLocaleDateString('ar-EG', { month: 'short', year: 'numeric' })}
               </div>
             </div>
-            <h3 className="text-lg font-bold mb-2 group-hover:text-emerald-600 transition-colors">{session.examTitle}</h3>
+            <h3 className="text-lg font-bold mb-2 group-hover:text-emerald-600 transition-colors">{session.sessionName || session.examTitle}</h3>
             <div className="flex items-center gap-4 text-xs text-stone-500">
               <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> {session.studentCount} طلاب</span>
               <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {session.createdAt?.toDate().toLocaleDateString('ar-EG')}</span>
