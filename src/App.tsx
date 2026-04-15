@@ -14,7 +14,7 @@ import {
 import { 
   collection, addDoc, query, where, onSnapshot, 
   serverTimestamp, doc, updateDoc, deleteDoc, getDoc, setDoc,
-  getDocFromServer, increment
+  getDocFromServer, increment, getDocs, writeBatch
 } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, uploadBytes } from 'firebase/storage';
 import { auth, db, storage } from './firebase';
@@ -2535,6 +2535,31 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
 
   const sessionResults = results.filter((r: any) => r.sessionId === selectedSession?.id);
 
+  const deleteSession = async (e: React.MouseEvent, session: any) => {
+    e.stopPropagation();
+    if (!confirm(`هل أنت متأكد من حذف المجلد "${session.sessionName || session.examTitle}"؟ سيتم حذف جميع نتائج الطلاب المرتبطة به.`)) return;
+
+    try {
+      // 1. Delete all results associated with this session
+      const resultsQuery = query(collection(db, 'results'), where('sessionId', '==', session.id));
+      const resultsSnapshot = await getDocs(resultsQuery);
+      
+      const batch = writeBatch(db);
+      resultsSnapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+      
+      // 2. Delete the session itself
+      batch.delete(doc(db, 'sessions', session.id));
+      
+      await batch.commit();
+      alert('تم حذف المجلد وجميع نتائجه بنجاح.');
+    } catch (error) {
+      console.error('Error deleting session:', error);
+      alert('حدث خطأ أثناء حذف المجلد.');
+    }
+  };
+
   if (selectedResult) {
     const exam = exams.find((e: any) => e.id === selectedResult.examId);
     return (
@@ -2772,8 +2797,17 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
               <div className="w-12 h-12 bg-stone-100 rounded-2xl flex items-center justify-center text-stone-600 group-hover:bg-emerald-50 group-hover:text-emerald-600 transition-colors">
                 <Folder className="w-6 h-6" />
               </div>
-              <div className="text-[10px] font-bold text-stone-400 bg-stone-50 px-2 py-1 rounded-lg">
-                {session.createdAt?.toDate().toLocaleDateString('ar-EG', { month: 'short', year: 'numeric' })}
+              <div className="flex flex-col items-end gap-2">
+                <div className="text-[10px] font-bold text-stone-400 bg-stone-50 px-2 py-1 rounded-lg">
+                  {session.createdAt?.toDate().toLocaleDateString('ar-EG', { month: 'short', year: 'numeric' })}
+                </div>
+                <button 
+                  onClick={(e) => deleteSession(e, session)}
+                  className="p-2 text-stone-300 hover:text-red-500 transition-colors"
+                  title="حذف المجلد"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
             <h3 className="text-lg font-bold mb-2 group-hover:text-emerald-600 transition-colors">{session.sessionName || session.examTitle}</h3>
