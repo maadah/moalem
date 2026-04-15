@@ -1765,6 +1765,10 @@ function Grader({ user, userProfile, exam, onComplete, onCancel }: any) {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
+      if (images.length + newFiles.length > 150) {
+        alert('عذراً، لا يمكن رفع أكثر من 150 صفحة في المرة الواحدة.');
+        return;
+      }
       setImages([...images, ...newFiles]);
       const newPreviews = newFiles.map(file => URL.createObjectURL(file));
       setPreviews([...previews, ...newPreviews]);
