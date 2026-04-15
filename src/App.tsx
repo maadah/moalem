@@ -802,9 +802,9 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
       if (result.questions && result.questions.length > 0) {
         // Update user pagesUsed
         if (userProfile) {
-          await updateDoc(doc(db, 'users', user.uid), {
+          await setDoc(doc(db, 'users', user.uid), {
             pagesUsed: (userProfile.pagesUsed || 0) + extractionImages.length
-          });
+          }, { merge: true });
         }
 
         // Ensure all questions have IDs
@@ -1799,9 +1799,9 @@ function Grader({ user, userProfile, exam, onComplete, onCancel }: any) {
 
       // Update user pagesUsed
       if (userProfile) {
-        await updateDoc(doc(db, 'users', user.uid), {
+        await setDoc(doc(db, 'users', user.uid), {
           pagesUsed: (userProfile.pagesUsed || 0) + images.length
-        });
+        }, { merge: true });
       }
 
       setGradingResults(results);
