@@ -29,6 +29,51 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: any }> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: any, errorInfo: any) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      let errorMessage = "حدث خطأ غير متوقع في التطبيق.";
+      try {
+        const parsed = JSON.parse(this.state.error.message);
+        if (parsed.error) {
+          errorMessage = `خطأ في قاعدة البيانات: ${parsed.error}`;
+        }
+      } catch (e) {}
+
+      return (
+        <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-4 text-center" dir="rtl">
+          <div className="max-w-md w-full bg-white p-8 rounded-3xl shadow-xl border border-stone-200">
+            <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-stone-900 mb-2">عذراً، حدث خطأ</h2>
+            <p className="text-stone-600 mb-6">{errorMessage}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="w-full bg-stone-900 text-white py-3 rounded-xl font-medium hover:bg-stone-800 transition-colors"
+            >
+              إعادة تحميل الصفحة
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 type View = 'dashboard' | 'create-exam' | 'grade-papers' | 'results' | 'admin';
 
 interface UserProfile {
@@ -42,7 +87,66 @@ interface UserProfile {
   createdAt: any;
 }
 
-export default function App() {
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
+export default function AppWrapper() {
+  return (
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
+  );
+}
+
+function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [view, setView] = useState<View>('dashboard');
@@ -189,7 +293,21 @@ export default function App() {
     );
   }
 
-  if (userProfile?.status === 'pending') {
+  if (!userProfile) {
+    return (
+      <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-12 h-12 animate-spin text-emerald-600 mx-auto" />
+          <p className="text-stone-500">جاري تحميل ملف المستخدم...</p>
+          <button onClick={logout} className="text-stone-400 hover:text-red-500 transition-colors text-sm underline">
+            تسجيل الخروج
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (userProfile.status === 'pending') {
     return (
       <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-4" dir="rtl">
         <motion.div 
@@ -235,7 +353,7 @@ export default function App() {
     );
   }
 
-  if (userProfile?.status === 'rejected') {
+  if (userProfile.status === 'rejected') {
     return (
       <div className="min-h-screen bg-stone-50 flex flex-col items-center justify-center p-4" dir="rtl">
         <div className="max-w-md w-full bg-white p-8 rounded-3xl shadow-xl border border-stone-200 text-center">
@@ -370,16 +488,28 @@ function AdminDashboard() {
   }, []);
 
   const updateUserStatus = async (uid: string, status: 'approved' | 'rejected') => {
-    await updateDoc(doc(db, 'users', uid), { status });
+    try {
+      await updateDoc(doc(db, 'users', uid), { status });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `users/${uid}`);
+    }
   };
 
   const updateUserLimit = async (uid: string, limit: number) => {
-    await updateDoc(doc(db, 'users', uid), { pageLimit: limit });
+    try {
+      await updateDoc(doc(db, 'users', uid), { pageLimit: limit });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `users/${uid}`);
+    }
   };
 
   const deleteUser = async (uid: string) => {
     if (confirm('هل أنت متأكد من حذف هذا المستخدم نهائياً؟')) {
-      await deleteDoc(doc(db, 'users', uid));
+      try {
+        await deleteDoc(doc(db, 'users', uid));
+      } catch (e) {
+        handleFirestoreError(e, OperationType.DELETE, `users/${uid}`);
+      }
     }
   };
 
@@ -802,9 +932,13 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
       if (result.questions && result.questions.length > 0) {
         // Update user pagesUsed
         if (userProfile) {
-          await setDoc(doc(db, 'users', user.uid), {
-            pagesUsed: (userProfile.pagesUsed || 0) + extractionImages.length
-          }, { merge: true });
+          try {
+            await setDoc(doc(db, 'users', user.uid), {
+              pagesUsed: (userProfile.pagesUsed || 0) + extractionImages.length
+            }, { merge: true });
+          } catch (e) {
+            handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`);
+          }
         }
 
         // Ensure all questions have IDs
@@ -978,12 +1112,20 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
       };
 
       if (initialData?.id) {
-        await updateDoc(doc(db, 'exams', initialData.id), examData);
+        try {
+          await updateDoc(doc(db, 'exams', initialData.id), examData);
+        } catch (e) {
+          handleFirestoreError(e, OperationType.UPDATE, `exams/${initialData.id}`);
+        }
       } else {
-        await addDoc(collection(db, 'exams'), {
-          ...examData,
-          createdAt: serverTimestamp()
-        });
+        try {
+          await addDoc(collection(db, 'exams'), {
+            ...examData,
+            createdAt: serverTimestamp()
+          });
+        } catch (e) {
+          handleFirestoreError(e, OperationType.CREATE, 'exams');
+        }
       }
       onSave();
     } catch (e) {
@@ -1799,9 +1941,13 @@ function Grader({ user, userProfile, exam, onComplete, onCancel }: any) {
 
       // Update user pagesUsed
       if (userProfile) {
-        await setDoc(doc(db, 'users', user.uid), {
-          pagesUsed: (userProfile.pagesUsed || 0) + images.length
-        }, { merge: true });
+        try {
+          await setDoc(doc(db, 'users', user.uid), {
+            pagesUsed: (userProfile.pagesUsed || 0) + images.length
+          }, { merge: true });
+        } catch (e) {
+          handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`);
+        }
       }
 
       setGradingResults(results);
@@ -1818,26 +1964,35 @@ function Grader({ user, userProfile, exam, onComplete, onCancel }: any) {
   const saveAllResults = async () => {
     try {
       // 1. Create a session document
-      const sessionRef = await addDoc(collection(db, 'sessions'), {
-        examId: exam.id,
-        examTitle: exam.title,
-        authorUid: user.uid,
-        studentCount: gradingResults.length,
-        createdAt: serverTimestamp()
-      });
-
-      // 2. Save each result with the sessionId
-      for (const result of gradingResults) {
-        await addDoc(collection(db, 'results'), {
-          studentName: result.studentName,
-          gradings: result.gradings,
-          totalGrade: result.totalGrade,
-          sessionId: sessionRef.id,
+      let sessionRef;
+      try {
+        sessionRef = await addDoc(collection(db, 'sessions'), {
           examId: exam.id,
           examTitle: exam.title,
           authorUid: user.uid,
+          studentCount: gradingResults.length,
           createdAt: serverTimestamp()
         });
+      } catch (e) {
+        handleFirestoreError(e, OperationType.CREATE, 'sessions');
+      }
+
+      // 2. Save each result with the sessionId
+      for (const result of gradingResults) {
+        try {
+          await addDoc(collection(db, 'results'), {
+            studentName: result.studentName,
+            gradings: result.gradings,
+            totalGrade: result.totalGrade,
+            sessionId: sessionRef.id,
+            examId: exam.id,
+            examTitle: exam.title,
+            authorUid: user.uid,
+            createdAt: serverTimestamp()
+          });
+        } catch (e) {
+          handleFirestoreError(e, OperationType.CREATE, 'results');
+        }
       }
       onComplete();
     } catch (e) {
