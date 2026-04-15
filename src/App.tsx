@@ -138,6 +138,109 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
+function GradingResultItem({ question, gradings, onGradeChange, level = 1 }: any) {
+  const grading = gradings?.find((g: any) => g.questionId === question.id);
+  const hasSub = question.subQuestions && question.subQuestions.length > 0;
+  
+  // Try to extract a clean label (e.g., "س1" or "أ")
+  let label = question.text.split(/[:\-\.\/\(\)\[\]]/)[0].trim();
+  if (label.length > 15 || label.length === 0) label = "";
+
+  return (
+    <div className={cn(
+      "p-6 rounded-2xl border space-y-3 transition-all",
+      level === 1 ? "bg-stone-50 border-stone-100 shadow-sm" : "bg-white border-stone-50 mr-6"
+    )}>
+      <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-2 flex-1">
+          <div className="flex items-start gap-2">
+            <span className="font-bold text-stone-700 whitespace-nowrap">
+              {level === 1 ? "سؤال " : ""}{label || ""}:
+            </span>
+            <span className="text-stone-800">{question.text}</span>
+          </div>
+          {question.questionImage && (
+            <img 
+              src={question.questionImage} 
+              alt="سؤال" 
+              className="w-48 h-auto max-h-64 object-contain rounded-xl border border-stone-200 mt-2" 
+              referrerPolicy="no-referrer"
+            />
+          )}
+        </div>
+        {!hasSub && grading && (
+          <div className="flex items-center gap-2 mr-4">
+            {onGradeChange ? (
+              <input 
+                type="number" 
+                value={grading.grade} 
+                onChange={(e) => onGradeChange(question.id, Number(e.target.value))}
+                className="w-16 px-2 py-1 rounded-lg border border-stone-200 text-center font-bold text-emerald-600 focus:ring-2 focus:ring-emerald-500 outline-none"
+              />
+            ) : (
+              <div className="px-4 py-2 bg-white rounded-xl border border-stone-200 font-bold text-emerald-600 shadow-sm">
+                {grading.grade}
+              </div>
+            )}
+            <span className="text-stone-400 font-medium">/ {question.grade || '?'}</span>
+          </div>
+        )}
+      </div>
+
+      {!hasSub && grading && (
+        <div className="mt-4 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm">
+            <div className="space-y-2">
+              <span className="text-stone-400 font-bold flex items-center gap-1 uppercase tracking-wider text-[10px]">
+                <User className="w-3 h-3" /> إجابة الطالب:
+              </span>
+              <p className="p-4 bg-white rounded-2xl border border-stone-100 italic text-stone-700 leading-relaxed shadow-sm">"{grading.studentAnswer}"</p>
+            </div>
+            <div className="space-y-2">
+              <span className="text-stone-400 font-bold flex items-center gap-1 uppercase tracking-wider text-[10px]">
+                <CheckCircle className="w-3 h-3" /> الإجابة النموذجية:
+              </span>
+              <div className="flex flex-col gap-3">
+                <p className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 text-emerald-900 leading-relaxed shadow-sm">"{question.answer || 'غير متوفرة'}"</p>
+                {question.answerImage && (
+                  <img 
+                    src={question.answerImage} 
+                    alt="إجابة نموذجية" 
+                    className="w-48 h-auto max-h-64 object-contain rounded-xl border border-emerald-100" 
+                    referrerPolicy="no-referrer"
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+          {grading.feedback && (
+            <div className="pt-4 border-t border-stone-100">
+              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider flex items-center gap-1">
+                <FileText className="w-3 h-3" /> ملاحظات المصحح:
+              </span>
+              <p className="text-stone-600 mt-2 leading-relaxed bg-stone-100/50 p-3 rounded-xl">{grading.feedback}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {hasSub && (
+        <div className="space-y-4 mt-6 border-r-2 border-stone-100 pr-2">
+          {question.subQuestions.map((sq: any) => (
+            <GradingResultItem 
+              key={sq.id} 
+              question={sq} 
+              gradings={gradings} 
+              onGradeChange={onGradeChange} 
+              level={level + 1} 
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AppWrapper() {
   return (
     <ErrorBoundary>
@@ -2104,81 +2207,22 @@ function Grader({ user, userProfile, exam, onComplete, onCancel }: any) {
             </div>
 
             <div className="space-y-4">
-              {currentGrading.gradings?.map((g: any, i: number) => {
-                // Find question or sub-question (3 levels)
-                let question: any = null;
-                exam.questions.forEach((q: any) => {
-                  if (q.id === g.questionId) question = q;
-                  q.subQuestions?.forEach((sq: any) => {
-                    if (sq.id === g.questionId) question = sq;
-                    sq.subQuestions?.forEach((ssq: any) => {
-                      if (ssq.id === g.questionId) question = ssq;
-                    });
-                  });
-                });
-
-                const isParent = question?.subQuestions && question.subQuestions.length > 0;
-
-                return (
-                  <div key={i} className="p-6 bg-stone-50 rounded-2xl border border-stone-100 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col gap-2">
-                        <span className="font-bold">سؤال {i + 1}: {question?.text || 'سؤال محذوف'}</span>
-                        {question?.questionImage && (
-                          <img 
-                            src={question.questionImage} 
-                            alt="سؤال" 
-                            className="w-32 h-32 object-cover rounded-xl border border-stone-200" 
-                            referrerPolicy="no-referrer"
-                          />
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input 
-                          type="number" 
-                          value={g.grade} 
-                          onChange={(e) => {
-                            const newGradings = [...currentGrading.gradings];
-                            newGradings[i].grade = Number(e.target.value);
-                            const newTotal = newGradings.reduce((acc: any, curr: any) => acc + curr.grade, 0);
-                            const newResults = [...gradingResults];
-                            newResults[currentResultIndex] = { ...currentGrading, gradings: newGradings, totalGrade: newTotal };
-                            setGradingResults(newResults);
-                          }}
-                          className="w-16 px-2 py-1 rounded-lg border border-stone-200 text-center font-bold text-emerald-600"
-                        />
-                        <span className="text-stone-400">/ {question?.grade || '?'}</span>
-                      </div>
-                    </div>
-                    {!isParent && (
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div className="space-y-1">
-                          <span className="text-stone-400 block">إجابة الطالب:</span>
-                          <p className="p-3 bg-white rounded-xl border border-stone-100 italic">"{g.studentAnswer}"</p>
-                        </div>
-                        <div className="space-y-1">
-                          <span className="text-stone-400 block">الإجابة النموذجية:</span>
-                          <div className="flex flex-col gap-2">
-                            <p className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800">"{question?.answer || 'غير متوفرة'}"</p>
-                            {question?.answerImage && (
-                              <img 
-                                src={question.answerImage} 
-                                alt="إجابة نموذجية" 
-                                className="w-32 h-32 object-cover rounded-xl border border-emerald-100" 
-                                referrerPolicy="no-referrer"
-                              />
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                    <div className="pt-2">
-                      <span className="text-xs font-bold text-stone-400 uppercase">ملاحظات المصحح:</span>
-                      <p className="text-stone-600 mt-1">{g.feedback}</p>
-                    </div>
-                  </div>
-                );
-              })}
+              {exam.questions.map((q: any) => (
+                <GradingResultItem 
+                  key={q.id} 
+                  question={q} 
+                  gradings={currentGrading.gradings} 
+                  onGradeChange={(qId: string, newGrade: number) => {
+                    const newGradings = currentGrading.gradings.map((g: any) => 
+                      g.questionId === qId ? { ...g, grade: newGrade } : g
+                    );
+                    const newTotal = newGradings.reduce((acc: any, curr: any) => acc + curr.grade, 0);
+                    const newResults = [...gradingResults];
+                    newResults[currentResultIndex] = { ...currentGrading, gradings: newGradings, totalGrade: newTotal };
+                    setGradingResults(newResults);
+                  }}
+                />
+              ))}
             </div>
 
             <div className="flex justify-between items-center pt-6 border-t border-stone-100">
@@ -2350,84 +2394,13 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
           </div>
 
           <div className="space-y-4">
-            {selectedResult.gradings?.map((g: any, i: number) => {
-              let question: any = null;
-              let label = "";
-              
-              if (exam) {
-                const findInHierarchy = (qs: Question[], path: string = ""): boolean => {
-                  for (let idx = 0; idx < qs.length; idx++) {
-                    const q = qs[idx];
-                    let currentLabel = q.text.split(/[:\-\.]/)[0].trim();
-                    if (currentLabel.length > 10) currentLabel = `Item ${idx + 1}`;
-                    
-                    const fullPath = path ? `${path} / ${currentLabel}` : currentLabel;
-                    
-                    if (q.id === g.questionId) {
-                      question = q;
-                      label = fullPath;
-                      return true;
-                    }
-                    if (q.subQuestions && findInHierarchy(q.subQuestions, fullPath)) {
-                      return true;
-                    }
-                  }
-                  return false;
-                };
-                findInHierarchy(exam.questions);
-              }
-
-              const isParent = question?.subQuestions && question.subQuestions.length > 0;
-
-              return (
-                <div key={i} className="p-6 bg-stone-50 rounded-2xl border border-stone-100 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-col gap-2">
-                      <span className="font-bold text-stone-700">سؤال {label || i + 1}: {question?.text || 'سؤال محذوف'}</span>
-                      {question?.questionImage && (
-                        <img 
-                          src={question.questionImage} 
-                          alt="سؤال" 
-                          className="w-32 h-32 object-cover rounded-xl border border-stone-200" 
-                          referrerPolicy="no-referrer"
-                        />
-                      )}
-                    </div>
-                    <div className="px-3 py-1 bg-white rounded-lg border border-stone-200 font-bold text-emerald-600">
-                      {g.grade} <span className="text-stone-300 text-xs">/ {question?.grade || '?'}</span>
-                    </div>
-                  </div>
-                  {!isParent && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm mt-4">
-                    <div className="space-y-1">
-                      <span className="text-stone-400 block">إجابة الطالب:</span>
-                      <p className="p-3 bg-white rounded-xl border border-stone-100 italic">"{g.studentAnswer}"</p>
-                    </div>
-                    <div className="space-y-1">
-                      <span className="text-stone-400 block">الإجابة النموذجية:</span>
-                      <div className="flex flex-col gap-2">
-                        <p className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800">"{question?.answer || 'غير متوفرة'}"</p>
-                        {question?.answerImage && (
-                          <img 
-                            src={question.answerImage} 
-                            alt="إجابة نموذجية" 
-                            className="w-32 h-32 object-cover rounded-xl border border-emerald-100" 
-                            referrerPolicy="no-referrer"
-                          />
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {g.feedback && (
-                    <div className="pt-2">
-                      <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">ملاحظات المصحح:</span>
-                      <p className="text-stone-600 text-sm mt-1">{g.feedback}</p>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+            {exam?.questions.map((q: any) => (
+              <GradingResultItem 
+                key={q.id} 
+                question={q} 
+                gradings={selectedResult.gradings} 
+              />
+            ))}
           </div>
         </div>
       </motion.div>
@@ -2480,45 +2453,13 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
                 </div>
               </div>
               <div className="space-y-6">
-                {res.gradings?.map((g: any, idx: number) => {
-                  const exam = exams.find((e: any) => e.id === res.examId);
-                  let question: any = null;
-                  if (exam) {
-                    exam.questions.forEach((q: any) => {
-                      if (q.id === g.questionId) question = q;
-                      q.subQuestions?.forEach((sq: any) => {
-                        if (sq.id === g.questionId) question = sq;
-                        sq.subQuestions?.forEach((ssq: any) => {
-                          if (ssq.id === g.questionId) question = ssq;
-                        });
-                      });
-                    });
-                  }
-                  return (
-                    <div key={idx} className="p-6 bg-stone-50 rounded-2xl border border-stone-100">
-                      <div className="flex justify-between mb-4">
-                        <span className="font-bold text-lg">سؤال {idx + 1}: {question?.text || 'سؤال محذوف'}</span>
-                        <span className="font-bold text-emerald-600">{g.grade} / {question?.grade || '?'}</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-6 text-sm">
-                        <div>
-                          <span className="text-stone-400 block mb-1">إجابة الطالب:</span>
-                          <p className="p-3 bg-white rounded-xl border border-stone-100">"{g.studentAnswer}"</p>
-                        </div>
-                        <div>
-                          <span className="text-stone-400 block mb-1">الإجابة النموذجية:</span>
-                          <p className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800">"{question?.answer || 'غير متوفرة'}"</p>
-                        </div>
-                      </div>
-                      {g.feedback && (
-                        <div className="mt-4 pt-4 border-t border-stone-200">
-                          <span className="text-xs font-bold text-stone-400 uppercase">ملاحظات المصحح:</span>
-                          <p className="text-stone-600 mt-1">{g.feedback}</p>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                {exams.find((e: any) => e.id === res.examId)?.questions.map((q: any) => (
+                  <GradingResultItem 
+                    key={q.id} 
+                    question={q} 
+                    gradings={res.gradings} 
+                  />
+                ))}
               </div>
             </div>
           ))}
@@ -2542,45 +2483,13 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
                 </div>
               </div>
               <div className="space-y-6">
-                {res.gradings?.map((g: any, idx: number) => {
-                  const exam = exams.find((e: any) => e.id === res.examId);
-                  let question: any = null;
-                  if (exam) {
-                    exam.questions.forEach((q: any) => {
-                      if (q.id === g.questionId) question = q;
-                      q.subQuestions?.forEach((sq: any) => {
-                        if (sq.id === g.questionId) question = sq;
-                        sq.subQuestions?.forEach((ssq: any) => {
-                          if (ssq.id === g.questionId) question = ssq;
-                        });
-                      });
-                    });
-                  }
-                  return (
-                    <div key={idx} className="p-6 bg-stone-50 rounded-2xl border border-stone-100">
-                      <div className="flex justify-between mb-4">
-                        <span className="font-bold text-lg">سؤال {idx + 1}: {question?.text || 'سؤال محذوف'}</span>
-                        <span className="font-bold text-emerald-600">{g.grade} / {question?.grade || '?'}</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-6 text-sm">
-                        <div>
-                          <span className="text-stone-400 block mb-1">إجابة الطالب:</span>
-                          <p className="p-3 bg-white rounded-xl border border-stone-100">"{g.studentAnswer}"</p>
-                        </div>
-                        <div>
-                          <span className="text-stone-400 block mb-1">الإجابة النموذجية:</span>
-                          <p className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800">"{question?.answer || 'غير متوفرة'}"</p>
-                        </div>
-                      </div>
-                      {g.feedback && (
-                        <div className="mt-4 pt-4 border-t border-stone-200">
-                          <span className="text-xs font-bold text-stone-400 uppercase">ملاحظات المصحح:</span>
-                          <p className="text-stone-600 mt-1">{g.feedback}</p>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                {exams.find((e: any) => e.id === res.examId)?.questions.map((q: any) => (
+                  <GradingResultItem 
+                    key={q.id} 
+                    question={q} 
+                    gradings={res.gradings} 
+                  />
+                ))}
               </div>
             </div>
           ))}

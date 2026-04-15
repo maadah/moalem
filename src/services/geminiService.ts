@@ -371,8 +371,8 @@ export async function gradeStudentPaper(
   const flatten = (qs: Question[], parentText: string = "", path: string = "") => {
     qs.forEach((q, index) => {
       // Try to extract a clean label (e.g., "س1" or "أ")
-      let label = q.text.split(/[:\-\.]/)[0].trim();
-      if (label.length > 10) label = `Item ${index + 1}`;
+      let label = q.text.split(/[:\-\.\/\(\)\[\]]/)[0].trim();
+      if (label.length > 15 || label.length === 0) label = `Item ${index + 1}`;
       
       const fullPath = path ? `${path} / ${label}` : label;
       const combinedText = parentText ? `${parentText} - ${q.text}` : q.text;
