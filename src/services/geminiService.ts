@@ -284,7 +284,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
   };
 
   const response = await retryWithBackoff(() => ai.models.generateContent({
-    model: "gemini-1.5-flash", // Use stable Flash model
+    model: "gemini-flash-latest", // Use stable Flash model
     contents: { parts: [...imageParts, { text: prompt }] },
     config: {
       systemInstruction: "You are a professional exam digitizer. Extract ALL questions into a precise JSON structure. Be concise to avoid long responses. Use \\n for newlines.",
@@ -371,20 +371,7 @@ export async function gradeStudentPaper(
     throw new Error("فشل في معالجة الصور المرفوعة.");
   }
 
-  // 1. Try Backend API first (Secure & Preferred)
-  try {
-    const response = await fetch('/api/grade', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageUrls: base64Images, questions, totalExamGrade, requiredQuestionsCount }),
-    });
-
-    if (response.ok) {
-      return await response.json();
-    }
-  } catch (e) {}
-
-  // 2. Fallback to Client-side
+  // Fallback to Client-side
   const apiKey = getApiKey();
   if (!apiKey) {
     throw new Error("مفتاح API مفقود. يرجى التأكد من إعداد GEMINI_API_KEY في متغيرات البيئة.");
@@ -508,7 +495,7 @@ export async function gradeStudentPaper(
 
     try {
       const result = await retryWithBackoff(() => ai.models.generateContent({
-        model: "gemini-1.5-flash", 
+        model: "gemini-flash-latest", 
         contents: [{ role: "user", parts: [...imageParts, { text: prompt }] }],
         config: {
           systemInstruction: "You are a professional Arabic teacher. All your feedback and communication must be in Arabic. Strictly follow the provided question IDs. Ensure all JSON strings are properly escaped.",
