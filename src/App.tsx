@@ -2299,8 +2299,48 @@ function Grader({ user, userProfile, exam, onComplete, onCancel }: any) {
                 </span>
               </div>
               <div className="flex gap-4">
+                <button 
+                  onClick={async () => {
+                    const element = document.getElementById(`current-grading-result`);
+                    if (element) {
+                      await generatePDFFromElement(element, `${currentGrading.studentName}_نتيجة.pdf`);
+                    }
+                  }}
+                  className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  تحميل PDF
+                </button>
                 <button onClick={() => setGradingResults([])} className="px-6 py-2 rounded-xl text-stone-500 hover:bg-stone-100 transition-colors">إعادة التصحيح</button>
                 <button onClick={saveAllResults} className="px-8 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-600/20">حفظ جميع النتائج</button>
+              </div>
+            </div>
+          </div>
+
+          {/* Hidden container for PDF capture of current result */}
+          <div className="fixed left-0 top-0 w-[210mm] opacity-0 pointer-events-none">
+            <div id="current-grading-result" className="bg-white p-10 space-y-8">
+              <div className="flex items-center justify-between border-b border-stone-100 pb-6">
+                <div>
+                  <h3 className="text-3xl font-bold">الطالب: {currentGrading.studentName}</h3>
+                  <p className="text-stone-500 mt-2 text-lg">الامتحان: {exam.title}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-stone-400 text-sm">الدرجة النهائية</span>
+                  <div className="text-5xl font-bold text-emerald-600">
+                    {currentGrading.totalGrade}
+                    <span className="text-xl text-stone-300"> / {exam.totalGrade}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-6">
+                {exam.questions.map((q: any) => (
+                  <GradingResultItem 
+                    key={q.id} 
+                    question={q} 
+                    gradings={currentGrading.gradings} 
+                  />
+                ))}
               </div>
             </div>
           </div>
@@ -2309,6 +2349,75 @@ function Grader({ user, userProfile, exam, onComplete, onCancel }: any) {
     </motion.div>
   );
 }
+
+const generatePDFFromElement = async (element: HTMLElement, fileName: string) => {
+  try {
+    // Ensure all images are loaded before capturing
+    const images = element.getElementsByTagName('img');
+    await Promise.all(Array.from(images).map(img => {
+      if (img.complete) return Promise.resolve();
+      return new Promise((resolve) => {
+        img.onload = resolve;
+        img.onerror = resolve;
+      });
+    }));
+
+    // Small delay to ensure styles are applied
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    const canvas = await html2canvas(element, {
+      scale: 1, // Reduced scale for better compatibility and memory usage
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+      onclone: (clonedDoc, clonedElement) => {
+        // Ensure the cloned element is visible and properly styled for capture
+        if (clonedElement instanceof HTMLElement) {
+          clonedElement.style.position = 'static';
+          clonedElement.style.visibility = 'visible';
+          clonedElement.style.display = 'block';
+          clonedElement.style.opacity = '1';
+          clonedElement.style.width = '210mm'; // Standard A4 width
+          clonedElement.style.margin = '0';
+          clonedElement.style.padding = '20mm';
+        }
+      }
+    });
+    
+    const imgData = canvas.toDataURL('image/jpeg', 0.7); 
+    const pdf = new jsPDF({
+      orientation: 'p',
+      unit: 'mm',
+      format: 'a4'
+    });
+    
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const imgProps = pdf.getImageProperties(imgData);
+    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+    
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    let heightLeft = pdfHeight;
+    let position = 0;
+
+    // Add first page
+    pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
+    heightLeft -= pageHeight;
+
+    // Add subsequent pages if content is longer than one page
+    while (heightLeft > 0) {
+      position = heightLeft - pdfHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
+      heightLeft -= pageHeight;
+    }
+
+    pdf.save(fileName);
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    alert('حدث خطأ أثناء إنشاء ملف PDF. يرجى المحاولة مرة أخرى.');
+  }
+};
 
 function ResultsView({ results, sessions, exams, onBack }: any) {
   const [selectedResult, setSelectedResult] = useState<any>(null);
@@ -2337,70 +2446,6 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
       await generatePDFFromElement(element, `${result.studentName}_result.pdf`);
     } finally {
       setIsExporting(false);
-    }
-  };
-
-  const generatePDFFromElement = async (element: HTMLElement, fileName: string) => {
-    try {
-      // Ensure all images are loaded before capturing
-      const images = element.getElementsByTagName('img');
-      await Promise.all(Array.from(images).map(img => {
-        if (img.complete) return Promise.resolve();
-        return new Promise((resolve) => {
-          img.onload = resolve;
-          img.onerror = resolve;
-        });
-      }));
-
-      const canvas = await html2canvas(element, {
-        scale: 1.5,
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight,
-        onclone: (clonedDoc) => {
-          const clonedElement = clonedDoc.getElementById(element.id) || clonedDoc.querySelector('.pdf-export-container');
-          if (clonedElement instanceof HTMLElement) {
-            clonedElement.style.position = 'relative';
-            clonedElement.style.left = '0';
-            clonedElement.style.top = '0';
-            clonedElement.style.visibility = 'visible';
-            clonedElement.style.display = 'block';
-          }
-        }
-      });
-      
-      const imgData = canvas.toDataURL('image/jpeg', 0.8); // Use JPEG with quality to reduce size
-      const pdf = new jsPDF({
-        orientation: 'p',
-        unit: 'mm',
-        format: 'a4'
-      });
-      
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      let heightLeft = pdfHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft > 0) {
-        position = heightLeft - pdfHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
-        heightLeft -= pageHeight;
-      }
-
-      pdf.save(fileName);
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('حدث خطأ أثناء إنشاء ملف PDF. يرجى المحاولة مرة أخرى.');
     }
   };
 
