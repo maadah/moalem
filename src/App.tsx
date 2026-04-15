@@ -510,18 +510,20 @@ function App() {
                 <span className="text-[10px] font-bold text-stone-600">{userProfile?.pagesUsed} / {userProfile?.pageLimit}</span>
               </div>
             </div>
-            <button 
-              onClick={() => {
-                if(confirm('هل تريد مسح مفتاح API المحفوظ؟ سيطلب منك التطبيق إدخاله مرة أخرى عند التصحيح القادم.')) {
-                  localStorage.removeItem('GEMINI_API_KEY_FALLBACK');
-                  alert('تم مسح المفتاح بنجاح.');
-                }
-              }}
-              className="p-2 text-stone-400 hover:text-emerald-600 transition-colors"
-              title="إعادة تعيين مفتاح API"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
+            {user.email === 'asmaomar5566@gmail.com' && (
+              <button 
+                onClick={() => {
+                  if(confirm('هل تريد مسح مفتاح API المحفوظ؟ سيطلب منك التطبيق إدخاله مرة أخرى عند التصحيح القادم.')) {
+                    localStorage.removeItem('GEMINI_API_KEY_FALLBACK');
+                    alert('تم مسح المفتاح بنجاح.');
+                  }
+                }}
+                className="p-2 text-stone-400 hover:text-emerald-600 transition-colors"
+                title="إعادة تعيين مفتاح API"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+            )}
             <div className="flex items-center gap-2 px-3 py-1.5 bg-stone-100 rounded-full">
               <img src={user.photoURL || ''} alt="" className="w-6 h-6 rounded-full" />
               <span className="text-sm font-medium">{user.displayName}</span>
