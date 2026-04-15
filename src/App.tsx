@@ -983,26 +983,40 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
   };
 
   const processQuestionsForStorage = async (qs: Question[]): Promise<Question[]> => {
+    if (!qs) return [];
+    
     return Promise.all(qs.map(async (q) => {
       const newQ = { ...q };
+      const tasks: Promise<void>[] = [];
       
-      // Parallelize image uploads for this question AND sub-questions processing
-      const [qImg, aImg, subQs] = await Promise.all([
-        q.questionImage && q.questionImage.startsWith('data:image') 
-          ? uploadImageToStorage(q.questionImage, `exams/${user.uid}/${q.id}_q_${Date.now()}`)
-          : Promise.resolve(q.questionImage),
-        q.answerImage && q.answerImage.startsWith('data:image')
-          ? uploadImageToStorage(q.answerImage, `exams/${user.uid}/${q.id}_a_${Date.now()}`)
-          : Promise.resolve(q.answerImage),
-        q.subQuestions && q.subQuestions.length > 0
-          ? processQuestionsForStorage(q.subQuestions)
-          : Promise.resolve([])
-      ]);
-
-      newQ.questionImage = qImg;
-      newQ.answerImage = aImg;
-      newQ.subQuestions = subQs;
-
+      // Process question image if it's a new base64 image
+      if (q.questionImage && q.questionImage.startsWith('data:image')) {
+        tasks.push(
+          uploadImageToStorage(q.questionImage, `exams/${user.uid}/${q.id}_q_${Date.now()}`)
+            .then(url => { newQ.questionImage = url; })
+        );
+      }
+      
+      // Process answer image if it's a new base64 image
+      if (q.answerImage && q.answerImage.startsWith('data:image')) {
+        tasks.push(
+          uploadImageToStorage(q.answerImage, `exams/${user.uid}/${q.id}_a_${Date.now()}`)
+            .then(url => { newQ.answerImage = url; })
+        );
+      }
+      
+      // Process sub-questions recursively
+      if (q.subQuestions && q.subQuestions.length > 0) {
+        tasks.push(
+          processQuestionsForStorage(q.subQuestions)
+            .then(processedSub => { newQ.subQuestions = processedSub; })
+        );
+      }
+      
+      if (tasks.length > 0) {
+        await Promise.all(tasks);
+      }
+      
       return newQ;
     }));
   };
