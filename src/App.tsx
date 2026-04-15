@@ -2060,6 +2060,8 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
   const [currentResultIndex, setCurrentResultIndex] = useState(0);
   const [targetSessionId, setTargetSessionId] = useState<string>('new');
   const [newSessionName, setNewSessionName] = useState<string>('');
+  const [showSaveModal, setShowSaveModal] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -2131,6 +2133,12 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
   };
 
   const saveAllResults = async () => {
+    if (targetSessionId === 'new' && !newSessionName.trim()) {
+      alert('يرجى إدخال اسم للمجلد الجديد');
+      return;
+    }
+
+    setIsSaving(true);
     try {
       // 1. Get or Create a session document
       let sessionId = targetSessionId;
@@ -2168,10 +2176,13 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
           handleFirestoreError(e, OperationType.CREATE, 'results');
         }
       }
+      setShowSaveModal(false);
       onComplete();
     } catch (e) {
       console.error(e);
       alert('حدث خطأ أثناء حفظ النتائج');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -2231,45 +2242,6 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
                 </button>
               </div>
             ))}
-          </div>
-
-          {/* Folder Selection UI */}
-          <div className="max-w-md mx-auto w-full bg-stone-50 p-6 rounded-2xl border border-stone-100 space-y-4">
-            <div className="flex items-center gap-2 text-stone-600 font-bold mb-2">
-              <Folder className="w-5 h-5" />
-              <span>تنظيم النتائج في مجلد</span>
-            </div>
-            
-            <div className="space-y-3">
-              {examSessions.length > 0 && (
-                <div className="space-y-2">
-                  <label className="text-xs text-stone-400 block mr-1">اختر مجلد موجود أو أنشئ جديداً:</label>
-                  <select 
-                    value={targetSessionId}
-                    onChange={(e) => setTargetSessionId(e.target.value)}
-                    className="w-full p-3 rounded-xl border border-stone-200 bg-white outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-                  >
-                    <option value="new">+ إنشاء مجلد جديد</option>
-                    {examSessions.map((s: any) => (
-                      <option key={s.id} value={s.id}>{s.sessionName || s.examTitle} ({s.studentCount} طلاب)</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {targetSessionId === 'new' && (
-                <div className="space-y-2">
-                  <label className="text-xs text-stone-400 block mr-1">اسم المجلد الجديد:</label>
-                  <input 
-                    type="text"
-                    value={newSessionName}
-                    onChange={(e) => setNewSessionName(e.target.value)}
-                    placeholder="مثلاً: تصحيح الشهر الأول"
-                    className="w-full p-3 rounded-xl border border-stone-200 bg-white outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-                  />
-                </div>
-              )}
-            </div>
           </div>
 
           <div className="flex justify-center gap-4">
@@ -2370,10 +2342,93 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
                   تحميل PDF
                 </button>
                 <button onClick={() => setGradingResults([])} className="px-6 py-2 rounded-xl text-stone-500 hover:bg-stone-100 transition-colors">إعادة التصحيح</button>
-                <button onClick={saveAllResults} className="px-8 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-600/20">حفظ جميع النتائج</button>
+                <button onClick={() => setShowSaveModal(true)} className="px-8 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-600/20">حفظ جميع النتائج</button>
               </div>
             </div>
           </div>
+
+          {/* Save Modal */}
+          <AnimatePresence>
+            {showSaveModal && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => !isSaving && setShowSaveModal(false)}
+                  className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm"
+                />
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                  className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
+                >
+                  <div className="p-8 space-y-6">
+                    <div className="flex items-center gap-3 text-emerald-600">
+                      <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center">
+                        <Folder className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold text-stone-900">حفظ النتائج</h3>
+                        <p className="text-stone-400 text-sm">اختر كيف تريد تنظيم هذه النتائج</p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {examSessions.length > 0 && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-bold text-stone-700 block mr-1">إضافة إلى مجلد موجود:</label>
+                          <select 
+                            value={targetSessionId}
+                            onChange={(e) => setTargetSessionId(e.target.value)}
+                            className="w-full p-4 rounded-2xl border border-stone-200 bg-stone-50 outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                          >
+                            <option value="new">+ إنشاء مجلد جديد</option>
+                            {examSessions.map((s: any) => (
+                              <option key={s.id} value={s.id}>{s.sessionName || s.examTitle} ({s.studentCount} طلاب)</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+
+                      {targetSessionId === 'new' && (
+                        <div className="space-y-2">
+                          <label className="text-sm font-bold text-stone-700 block mr-1">اسم المجلد الجديد:</label>
+                          <input 
+                            type="text"
+                            value={newSessionName}
+                            onChange={(e) => setNewSessionName(e.target.value)}
+                            placeholder="مثلاً: تصحيح الشهر الأول"
+                            className="w-full p-4 rounded-2xl border border-stone-200 bg-stone-50 outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                            autoFocus
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                      <button 
+                        disabled={isSaving}
+                        onClick={() => setShowSaveModal(false)}
+                        className="flex-1 py-4 rounded-2xl font-bold text-stone-400 hover:bg-stone-50 transition-colors"
+                      >
+                        إلغاء
+                      </button>
+                      <button 
+                        disabled={isSaving}
+                        onClick={saveAllResults}
+                        className="flex-[2] bg-emerald-600 text-white py-4 rounded-2xl font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-2 disabled:opacity-50"
+                      >
+                        {isSaving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />}
+                        تأكيد الحفظ
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
 
           {/* Hidden container for PDF capture of current result */}
           <div className="fixed left-0 top-0 w-[210mm] opacity-0 pointer-events-none">
