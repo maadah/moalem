@@ -165,6 +165,7 @@ function GradingResultItem({ question, gradings, onGradeChange, level = 1 }: any
               alt="سؤال" 
               className="w-48 h-auto max-h-64 object-contain rounded-xl border border-stone-200 mt-2" 
               referrerPolicy="no-referrer"
+              crossOrigin="anonymous"
             />
           )}
         </div>
@@ -208,6 +209,7 @@ function GradingResultItem({ question, gradings, onGradeChange, level = 1 }: any
                     alt="إجابة نموذجية" 
                     className="w-48 h-auto max-h-64 object-contain rounded-xl border border-emerald-100" 
                     referrerPolicy="no-referrer"
+                    crossOrigin="anonymous"
                   />
                 )}
               </div>
@@ -2263,38 +2265,63 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
   const [selectedYear, setSelectedYear] = useState<number | 'all'>('all');
   const [selectedMonth, setSelectedMonth] = useState<number | 'all'>('all');
 
+  const [isExporting, setIsExporting] = useState(false);
   const [isExportingAll, setIsExportingAll] = useState(false);
   const resultPrintRef = useRef<HTMLDivElement>(null);
   const allResultsPrintRef = useRef<HTMLDivElement>(null);
 
   const exportPDF = async (result: any) => {
-    // If we're not in the detailed view, we need to temporarily set the selected result 
-    // or use a hidden template. Let's use a more robust approach.
-    const element = document.getElementById(`print-result-${result.id}`);
-    if (!element) {
-      // If not found, it might be because it's not rendered. 
-      // We'll fallback to the main ref if we are in detailed view.
-      if (selectedResult?.id === result.id && resultPrintRef.current) {
-        await generatePDFFromElement(resultPrintRef.current, `${result.studentName}_result.pdf`);
-      } else {
-        alert('يرجى فتح تفاصيل الطالب أولاً لتحميل الملف، أو استخدم زر "تحميل الكل"');
+    setIsExporting(true);
+    try {
+      const element = document.getElementById(`print-result-${result.id}`);
+      if (!element) {
+        if (selectedResult?.id === result.id && resultPrintRef.current) {
+          await generatePDFFromElement(resultPrintRef.current, `${result.studentName}_result.pdf`);
+        } else {
+          alert('يرجى فتح تفاصيل الطالب أولاً لتحميل الملف، أو استخدم زر "تحميل الكل"');
+        }
+        return;
       }
-      return;
+      
+      await generatePDFFromElement(element, `${result.studentName}_result.pdf`);
+    } finally {
+      setIsExporting(false);
     }
-    
-    await generatePDFFromElement(element, `${result.studentName}_result.pdf`);
   };
 
   const generatePDFFromElement = async (element: HTMLElement, fileName: string) => {
     try {
+      // Ensure all images are loaded before capturing
+      const images = element.getElementsByTagName('img');
+      await Promise.all(Array.from(images).map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise((resolve) => {
+          img.onload = resolve;
+          img.onerror = resolve;
+        });
+      }));
+
       const canvas = await html2canvas(element, {
-        scale: 2,
+        scale: 1.5,
         useCORS: true,
+        allowTaint: true,
         logging: false,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight,
+        onclone: (clonedDoc) => {
+          const clonedElement = clonedDoc.getElementById(element.id) || clonedDoc.querySelector('.pdf-export-container');
+          if (clonedElement instanceof HTMLElement) {
+            clonedElement.style.position = 'relative';
+            clonedElement.style.left = '0';
+            clonedElement.style.top = '0';
+            clonedElement.style.visibility = 'visible';
+            clonedElement.style.display = 'block';
+          }
+        }
       });
       
-      const imgData = canvas.toDataURL('image/png');
+      const imgData = canvas.toDataURL('image/jpeg', 0.8); // Use JPEG with quality to reduce size
       const pdf = new jsPDF({
         orientation: 'p',
         unit: 'mm',
@@ -2305,25 +2332,24 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
       
-      // Handle multi-page if height exceeds A4
       const pageHeight = pdf.internal.pageSize.getHeight();
       let heightLeft = pdfHeight;
       let position = 0;
 
-      pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
       heightLeft -= pageHeight;
 
-      while (heightLeft >= 0) {
+      while (heightLeft > 0) {
         position = heightLeft - pdfHeight;
         pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
         heightLeft -= pageHeight;
       }
 
       pdf.save(fileName);
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('حدث خطأ أثناء إنشاء ملف PDF');
+      alert('حدث خطأ أثناء إنشاء ملف PDF. يرجى المحاولة مرة أخرى.');
     }
   };
 
@@ -2370,14 +2396,15 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
           </button>
           <button 
             onClick={() => exportPDF(selectedResult)}
-            className="bg-emerald-600 text-white px-6 py-2 rounded-xl flex items-center gap-2 hover:bg-emerald-700 transition-colors"
+            disabled={isExporting}
+            className="bg-emerald-600 text-white px-6 py-2 rounded-xl flex items-center gap-2 hover:bg-emerald-700 transition-colors disabled:opacity-50"
           >
-            <Download className="w-4 h-4" />
+            {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             تحميل PDF
           </button>
         </div>
 
-        <div ref={resultPrintRef} className="bg-white p-8 border space-y-8 pdf-export-container">
+        <div ref={resultPrintRef} id={`print-result-${selectedResult.id}`} className="bg-white p-8 border space-y-8 pdf-export-container">
           <div className="flex items-center justify-between border-b border-stone-100 pb-6">
             <div>
               <h3 className="text-2xl font-bold">الطالب: {selectedResult.studentName}</h3>
@@ -2436,7 +2463,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
         </div>
 
         {/* Hidden area for printing all results */}
-        <div className="fixed left-[-9999px] top-0 w-[210mm] pdf-export-container" ref={allResultsPrintRef}>
+        <div className="fixed left-0 top-0 w-[210mm] opacity-0 pointer-events-none pdf-export-container" ref={allResultsPrintRef}>
           {sessionResults.map((res: any) => (
             <div key={res.id} className="bg-white p-10 mb-10 border-b-2" style={{ pageBreakAfter: 'always' }}>
               <div className="flex items-center justify-between border-b border-stone-100 pb-6 mb-8">
@@ -2466,7 +2493,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
         </div>
 
         {/* Hidden area for individual printing from list */}
-        <div className="fixed left-[-9999px] top-0 w-[210mm] pdf-export-container">
+        <div className="fixed left-0 top-0 w-[210mm] opacity-0 pointer-events-none pdf-export-container">
           {sessionResults.map((res: any) => (
             <div key={res.id} id={`print-result-${res.id}`} className="bg-white p-10">
                <div className="flex items-center justify-between border-b border-stone-100 pb-6 mb-8">
