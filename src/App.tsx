@@ -983,21 +983,28 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
   };
 
   const processQuestionsForStorage = async (qs: Question[]): Promise<Question[]> => {
-    const processed = [];
-    for (const q of qs) {
+    return Promise.all(qs.map(async (q) => {
       const newQ = { ...q };
-      if (q.questionImage && q.questionImage.startsWith('data:image')) {
-        newQ.questionImage = await uploadImageToStorage(q.questionImage, `exams/${user.uid}/${q.id}_q_${Date.now()}`);
-      }
-      if (q.answerImage && q.answerImage.startsWith('data:image')) {
-        newQ.answerImage = await uploadImageToStorage(q.answerImage, `exams/${user.uid}/${q.id}_a_${Date.now()}`);
-      }
-      if (q.subQuestions) {
-        newQ.subQuestions = await processQuestionsForStorage(q.subQuestions);
-      }
-      processed.push(newQ);
-    }
-    return processed;
+      
+      // Parallelize image uploads for this question AND sub-questions processing
+      const [qImg, aImg, subQs] = await Promise.all([
+        q.questionImage && q.questionImage.startsWith('data:image') 
+          ? uploadImageToStorage(q.questionImage, `exams/${user.uid}/${q.id}_q_${Date.now()}`)
+          : Promise.resolve(q.questionImage),
+        q.answerImage && q.answerImage.startsWith('data:image')
+          ? uploadImageToStorage(q.answerImage, `exams/${user.uid}/${q.id}_a_${Date.now()}`)
+          : Promise.resolve(q.answerImage),
+        q.subQuestions && q.subQuestions.length > 0
+          ? processQuestionsForStorage(q.subQuestions)
+          : Promise.resolve([])
+      ]);
+
+      newQ.questionImage = qImg;
+      newQ.answerImage = aImg;
+      newQ.subQuestions = subQs;
+
+      return newQ;
+    }));
   };
 
   const handleExtractionFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
