@@ -139,37 +139,38 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 // --- PDF Generation Utility ---
-const generatePDFFromElement = async (element: HTMLElement, fileName: string, options: { padding?: string, useElementWidth?: boolean } = {}) => {
+const generatePDFFromElement = async (element: HTMLElement, fileName: string, options: { padding?: string, useElementWidth?: boolean, ignoreImages?: boolean } = {}) => {
   try {
-    console.log(`[PDF] Starting generation for: ${fileName}`);
+    console.log(`[PDF] Starting generation for: ${fileName}, ignoreImages: ${!!options.ignoreImages}`);
     
     // Check if element is valid and has dimensions
     if (!element || element.offsetHeight === 0) {
       console.error('[PDF] Element is invalid or has no height');
-      // If it's a hidden element, it might need a temporary display change
       if (element) {
         element.style.position = 'relative';
         element.style.left = '0';
       }
     }
 
-    // Ensure all images are loaded before capturing
-    const images = element.getElementsByTagName('img');
-    await Promise.all(Array.from(images).map(img => {
-      if (img.complete) return Promise.resolve();
-      return new Promise((resolve) => {
-        img.onload = resolve;
-        img.onerror = resolve;
-      });
-    }));
+    // Ensure all images are loaded before capturing (only if not ignoring them)
+    if (!options.ignoreImages) {
+      const images = element.getElementsByTagName('img');
+      await Promise.all(Array.from(images).map(img => {
+        if (img.complete) return Promise.resolve();
+        return new Promise((resolve) => {
+          img.onload = resolve;
+          img.onerror = resolve;
+        });
+      }));
+    }
 
     // Small delay to ensure styles and images are fully rendered
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise(resolve => setTimeout(resolve, options.ignoreImages ? 500 : 1000));
 
     const canvas = await html2canvas(element, {
       scale: 2, 
-      useCORS: true,
-      allowTaint: false, // Safer for toDataURL
+      useCORS: !options.ignoreImages,
+      allowTaint: false, 
       logging: false,
       backgroundColor: '#ffffff',
       windowWidth: options.useElementWidth ? element.scrollWidth : 1200,
@@ -182,19 +183,21 @@ const generatePDFFromElement = async (element: HTMLElement, fileName: string, op
           clonedElement.style.width = '210mm';
           clonedElement.style.margin = '0';
           
-          // Only apply padding if explicitly requested, otherwise keep original
           if (options.padding) {
             clonedElement.style.padding = options.padding;
           }
           
           const clonedImages = clonedElement.getElementsByTagName('img');
           for (let i = 0; i < clonedImages.length; i++) {
-            // Don't force crossOrigin if it's a data URL
-            if (!clonedImages[i].src.startsWith('data:')) {
-              clonedImages[i].crossOrigin = 'anonymous';
+            if (options.ignoreImages) {
+              clonedImages[i].style.display = 'none';
+            } else {
+              if (!clonedImages[i].src.startsWith('data:')) {
+                clonedImages[i].crossOrigin = 'anonymous';
+              }
+              clonedImages[i].style.display = 'block';
+              clonedImages[i].style.maxWidth = '100%';
             }
-            clonedImages[i].style.display = 'block';
-            clonedImages[i].style.maxWidth = '100%';
           }
         }
       }
@@ -2384,7 +2387,7 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
                   onClick={async () => {
                     const element = document.getElementById(`current-grading-result`);
                     if (element) {
-                      await generatePDFFromElement(element, `${currentGrading.studentName}_نتيجة.pdf`, { padding: '20mm' });
+                      await generatePDFFromElement(element, `${currentGrading.studentName}_نتيجة.pdf`, { padding: '20mm', ignoreImages: true });
                     }
                   }}
                   className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-2"
@@ -2533,7 +2536,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
       // 1. Priority: Use the visible ref if it's the same student
       if (selectedResult?.id === result.id && resultPrintRef.current) {
         console.log(`[ResultsView] Using visible resultPrintRef`);
-        await generatePDFFromElement(resultPrintRef.current, `${result.studentName}_نتيجة.pdf`, { padding: '20mm' });
+        await generatePDFFromElement(resultPrintRef.current, `${result.studentName}_نتيجة.pdf`, { padding: '20mm', ignoreImages: true });
         return;
       }
 
@@ -2541,7 +2544,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
       const element = document.getElementById(`print-result-list-${result.id}`);
       if (element) {
         console.log(`[ResultsView] Using hidden list element`);
-        await generatePDFFromElement(element, `${result.studentName}_نتيجة.pdf`, { padding: '20mm' });
+        await generatePDFFromElement(element, `${result.studentName}_نتيجة.pdf`, { padding: '20mm', ignoreImages: true });
       } else {
         console.warn(`[ResultsView] Element not found for result: ${result.id}`);
         alert('يرجى فتح تفاصيل الطالب أولاً لتحميل الملف');
