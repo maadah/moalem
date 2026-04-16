@@ -500,7 +500,7 @@ export async function gradeStudentPaper(
 
     try {
       const result = await retryWithBackoff(() => ai.models.generateContent({
-        model: "gemini-1.5-flash", 
+        model: "gemini-flash-latest", 
         contents: [{ role: "user", parts: [...imageParts, { text: prompt }] }],
         config: {
           systemInstruction: "You are a professional Arabic teacher. Your grading must be 100% consistent, objective, and fair. Always provide feedback in Arabic. Strictly follow the provided question IDs.",
