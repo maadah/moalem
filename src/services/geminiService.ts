@@ -462,13 +462,19 @@ export async function gradeStudentPaper(
     const batch = base64Images.slice(i, i + BATCH_SIZE);
     
     const prompt = `
-      You are an expert teacher grading student handwritten exam papers.
+      You are an expert teacher grading student handwritten exam papers. Your goal is to be EXTREMELY CONSISTENT and FAIR.
       
       EXAM QUESTIONS AND MODEL ANSWERS (Use these IDs exactly):
       ${JSON.stringify(flattenedQuestions, null, 2)}
       
       TOTAL EXAM GRADE: ${totalExamGrade}
       REQUIRED QUESTIONS COUNT: ${requiredQuestionsCount}
+      
+      GRADING PHILOSOPHY:
+      - **Consistency**: The same answer must ALWAYS receive the same grade.
+      - **Accuracy**: Compare the student's answer carefully with the model answer.
+      - **Partial Credit**: If an answer is partially correct, award partial points based on the completeness and correctness of the key points.
+      - **Handwriting**: Be patient with handwriting, but if it's completely illegible, award 0.
       
       INSTRUCTIONS:
       1. Analyze the provided images (Batch ${currentBatchIndex} of ${totalBatches}).
@@ -477,13 +483,12 @@ export async function gradeStudentPaper(
       4. **HIERARCHY HANDLING**: 
          - The "label" field (e.g., "س2 / A") tells you which question and branch it is.
          - If a student writes "س2" followed by "A", map the answer for "A" to the ID associated with label "س2 / A".
-         - DO NOT create a separate grading entry for the parent header "س2" if it's not in the list.
-      5. **DO NOT HALLUCINATE**: Under no circumstances should you include a "questionId" in the output that is not present in the provided list. If there are only 7 items in the list, you should have at most 7 grading results per student.
-      6. **STUDENT ANSWER EXTRACTION**: You MUST extract the FULL text of the student's handwritten answer for each question and put it in the "studentAnswer" field. This must be a VERBATIM transcription.
-      7. **ARABIC FEEDBACK ONLY**: You MUST provide all feedback and student names in Arabic language only.
-      8. **CONCISE FEEDBACK**: Provide very short, constructive feedback (max 15 words per question).
+      5. **DO NOT HALLUCINATE**: Only use IDs from the provided list.
+      6. **STUDENT ANSWER EXTRACTION**: Extract the FULL text of the student's handwritten answer verbatim.
+      7. **ARABIC FEEDBACK ONLY**: Provide all feedback and student names in Arabic.
+      8. **CONCISE FEEDBACK**: Provide short, constructive feedback (max 15 words). Explain WHY the grade was given if it's not a full mark.
       9. Calculate the total grade for the student.
-      10. **CRITICAL**: Ensure all strings are properly escaped for JSON.
+      10. **DETERMINISM**: Be objective. Do not let external factors influence the grade.
     `;
 
     const imageParts = batch.map((base64) => ({
@@ -495,12 +500,15 @@ export async function gradeStudentPaper(
 
     try {
       const result = await retryWithBackoff(() => ai.models.generateContent({
-        model: "gemini-flash-latest", 
+        model: "gemini-1.5-flash", 
         contents: [{ role: "user", parts: [...imageParts, { text: prompt }] }],
         config: {
-          systemInstruction: "You are a professional Arabic teacher. All your feedback and communication must be in Arabic. Strictly follow the provided question IDs. Ensure all JSON strings are properly escaped.",
+          systemInstruction: "You are a professional Arabic teacher. Your grading must be 100% consistent, objective, and fair. Always provide feedback in Arabic. Strictly follow the provided question IDs.",
           responseMimeType: "application/json",
-          responseSchema: gradingSchema
+          responseSchema: gradingSchema,
+          temperature: 0.1, // Near-zero for maximum consistency
+          topP: 0.1,
+          topK: 1
         },
       }));
 
