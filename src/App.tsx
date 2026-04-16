@@ -169,7 +169,7 @@ const generatePDFFromElement = async (element: HTMLElement, fileName: string, op
     const canvas = await html2canvas(element, {
       scale: 2, 
       useCORS: true,
-      allowTaint: true, // Allow taint as fallback for non-CORS images
+      allowTaint: false, // Safer for toDataURL
       logging: false,
       backgroundColor: '#ffffff',
       windowWidth: options.useElementWidth ? element.scrollWidth : 1200,
@@ -2530,21 +2530,22 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
     console.log(`[ResultsView] Exporting PDF for student: ${result.studentName}`);
     setIsExporting(true);
     try {
-      const element = document.getElementById(`print-result-${result.id}`);
-      console.log(`[ResultsView] Element found by ID: ${!!element}`);
-      
-      if (!element) {
-        if (selectedResult?.id === result.id && resultPrintRef.current) {
-          console.log(`[ResultsView] Using resultPrintRef.current`);
-          await generatePDFFromElement(resultPrintRef.current, `${result.studentName}_result.pdf`, { padding: '20mm' });
-        } else {
-          console.warn(`[ResultsView] Element not found and no ref available`);
-          alert('يرجى فتح تفاصيل الطالب أولاً لتحميل الملف، أو استخدم زر "تحميل الكل"');
-        }
+      // 1. Priority: Use the visible ref if it's the same student
+      if (selectedResult?.id === result.id && resultPrintRef.current) {
+        console.log(`[ResultsView] Using visible resultPrintRef`);
+        await generatePDFFromElement(resultPrintRef.current, `${result.studentName}_نتيجة.pdf`, { padding: '20mm' });
         return;
       }
-      
-      await generatePDFFromElement(element, `${result.studentName}_result.pdf`, { padding: '20mm' });
+
+      // 2. Fallback: Use the hidden list element
+      const element = document.getElementById(`print-result-list-${result.id}`);
+      if (element) {
+        console.log(`[ResultsView] Using hidden list element`);
+        await generatePDFFromElement(element, `${result.studentName}_نتيجة.pdf`, { padding: '20mm' });
+      } else {
+        console.warn(`[ResultsView] Element not found for result: ${result.id}`);
+        alert('يرجى فتح تفاصيل الطالب أولاً لتحميل الملف');
+      }
     } catch (error) {
       console.error(`[ResultsView] Error in exportPDF:`, error);
     } finally {
@@ -2719,7 +2720,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
         {/* Hidden area for individual printing from list */}
         <div className="fixed left-[-9999px] top-0 w-[210mm] pdf-export-container">
           {sessionResults.map((res: any) => (
-            <div key={res.id} id={`print-result-${res.id}`} className="bg-white p-10">
+            <div key={res.id} id={`print-result-list-${res.id}`} className="bg-white p-10">
                <div className="flex items-center justify-between border-b border-stone-100 pb-6 mb-8">
                 <div>
                   <h3 className="text-3xl font-bold">نتيجة الطالب: {res.studentName}</h3>
