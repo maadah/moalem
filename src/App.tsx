@@ -138,6 +138,86 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
   throw new Error(JSON.stringify(errInfo));
 }
 
+// --- PDF Generation Utility ---
+const generatePDFFromElement = async (element: HTMLElement, fileName: string) => {
+  try {
+    console.log(`[PDF] Starting generation for: ${fileName}`);
+    // Ensure all images are loaded before capturing
+    const images = element.getElementsByTagName('img');
+    await Promise.all(Array.from(images).map(img => {
+      if (img.complete) return Promise.resolve();
+      return new Promise((resolve) => {
+        img.onload = resolve;
+        img.onerror = resolve;
+      });
+    }));
+
+    // Small delay to ensure styles are applied
+    await new Promise(resolve => setTimeout(resolve, 800));
+
+    const canvas = await html2canvas(element, {
+      scale: 2, // High quality
+      useCORS: true,
+      allowTaint: false,
+      logging: false,
+      backgroundColor: '#ffffff',
+      windowWidth: element.scrollWidth || 1200,
+      windowHeight: element.scrollHeight || 1600,
+      onclone: (clonedDoc, clonedElement) => {
+        if (clonedElement instanceof HTMLElement) {
+          clonedElement.style.position = 'static';
+          clonedElement.style.visibility = 'visible';
+          clonedElement.style.display = 'block';
+          clonedElement.style.opacity = '1';
+          clonedElement.style.width = '210mm';
+          clonedElement.style.margin = '0';
+          clonedElement.style.padding = '20mm';
+          
+          const clonedImages = clonedElement.getElementsByTagName('img');
+          for (let i = 0; i < clonedImages.length; i++) {
+            clonedImages[i].crossOrigin = 'anonymous';
+            clonedImages[i].style.display = 'block';
+            clonedImages[i].style.maxWidth = '100%';
+          }
+        }
+      }
+    });
+    
+    const imgData = canvas.toDataURL('image/jpeg', 0.95); 
+    if (imgData === 'data:,') throw new Error('Canvas capture failed');
+
+    const pdf = new jsPDF({
+      orientation: 'p',
+      unit: 'mm',
+      format: 'a4'
+    });
+    
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const imgProps = pdf.getImageProperties(imgData);
+    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+    
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    let heightLeft = pdfHeight;
+    let position = 0;
+
+    pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
+    heightLeft -= pageHeight;
+
+    while (heightLeft > 0) {
+      position = heightLeft - pdfHeight;
+      pdf.addPage();
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
+      heightLeft -= pageHeight;
+    }
+
+    pdf.save(fileName);
+    console.log(`[PDF] Successfully saved: ${fileName}`);
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    alert('عذراً، حدث خطأ أثناء إنشاء ملف PDF. يرجى التأكد من اتصال الإنترنت والمحاولة مرة أخرى.');
+  }
+};
+
 function GradingResultItem({ question, gradings, onGradeChange, level = 1 }: any) {
   const grading = gradings?.find((g: any) => g.questionId === question.id);
   const hasSub = question.subQuestions && question.subQuestions.length > 0;
@@ -797,6 +877,7 @@ function ImageUpload({
             alt={label} 
             className={cn("object-cover rounded-lg border border-stone-200", compact ? "w-10 h-10" : "w-full h-24")}
             referrerPolicy="no-referrer"
+            crossOrigin="anonymous"
           />
           <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center gap-2 rounded-lg">
             <button 
@@ -1299,55 +1380,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
     
     setIsPrinting(true);
     try {
-      const element = ref.current;
-      
-      // Wait a bit for images to potentially load in the hidden div
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight
-      });
-      
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
-      if (imgData === 'data:,') {
-        throw new Error('Canvas is empty');
-      }
-
-      const pdf = new jsPDF({
-        orientation: 'p',
-        unit: 'mm',
-        format: 'a4'
-      });
-      
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      let heightLeft = pdfHeight;
-      let position = 0;
-
-      // Add first page
-      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
-      heightLeft -= pageHeight;
-
-      // Add subsequent pages if content is longer than one page
-      while (heightLeft > 0) {
-        position = heightLeft - pdfHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
-        heightLeft -= pageHeight;
-      }
-
-      pdf.save(`${title || 'exam'}_${mode}.pdf`);
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      alert('حدث خطأ أثناء إنشاء ملف PDF. يرجى التأكد من أن جميع الصور محملة بشكل صحيح.');
+      await generatePDFFromElement(ref.current, `${title || 'exam'}_${mode}.pdf`);
     } finally {
       setIsPrinting(false);
     }
@@ -1494,7 +1527,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
           <div className="flex gap-4 overflow-x-auto pb-2">
             {extractionImages.map((img, i) => (
               <div key={i} className="relative flex-shrink-0">
-                <img src={img} alt="" className="w-24 h-24 object-cover rounded-xl border border-emerald-200" />
+                <img src={img} alt="" className="w-24 h-24 object-cover rounded-xl border border-emerald-200" crossOrigin="anonymous" />
                 <button 
                   onClick={() => setExtractionImages(prev => prev.filter((_, idx) => idx !== i))}
                   className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg"
@@ -1603,7 +1636,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                     <h4 className="text-xl font-bold">س{idx + 1}: {q.text}</h4>
                     <span className="font-bold">({q.grade} درجة)</span>
                   </div>
-                  {q.questionImage && <img src={q.questionImage} className="max-h-64 object-contain rounded-lg" referrerPolicy="no-referrer" />}
+                  {q.questionImage && <img src={q.questionImage} className="max-h-64 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
                   
                   <div className="mr-6 space-y-4">
                     {q.subQuestions?.map((sq, sqIdx) => (
@@ -1615,7 +1648,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                           </p>
                           <span className="text-sm">({sq.grade} درجة)</span>
                         </div>
-                        {sq.questionImage && <img src={sq.questionImage} className="max-h-48 object-contain rounded-lg" referrerPolicy="no-referrer" />}
+                        {sq.questionImage && <img src={sq.questionImage} className="max-h-48 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
                         
                         <div className="mr-6 space-y-2">
                           {sq.subQuestions?.map((ssq, ssqIdx) => (
@@ -1659,7 +1692,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                     <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
                       <p className="text-emerald-800 font-bold mb-2">الإجابة النموذجية:</p>
                       <p className="whitespace-pre-wrap">{q.answer}</p>
-                      {q.answerImage && <img src={q.answerImage} className="mt-4 max-h-64 object-contain rounded-lg" referrerPolicy="no-referrer" />}
+                      {q.answerImage && <img src={q.answerImage} className="mt-4 max-h-64 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
                     </div>
                   )}
 
@@ -1674,7 +1707,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                           <div className="bg-stone-50 p-3 rounded-lg border border-stone-200 text-sm">
                             <p className="font-bold text-stone-500 mb-1">الجواب:</p>
                             <p>{sq.answer}</p>
-                            {sq.answerImage && <img src={sq.answerImage} className="mt-2 max-h-48 object-contain rounded-lg" referrerPolicy="no-referrer" />}
+                            {sq.answerImage && <img src={sq.answerImage} className="mt-2 max-h-48 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
                           </div>
                         )}
                       </div>
@@ -2230,7 +2263,7 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
           <div className="flex flex-wrap gap-4 justify-center">
             {previews.map((url, i) => (
               <div key={i} className="relative w-24 h-32 rounded-lg overflow-hidden border border-stone-200 group">
-                <img src={url} alt="" className="w-full h-full object-cover" />
+                <img src={url} alt="" className="w-full h-full object-cover" crossOrigin="anonymous" />
                 <button 
                   onClick={() => {
                     setPreviews(previews.filter((_, idx) => idx !== i));
@@ -2431,7 +2464,7 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
           </AnimatePresence>
 
           {/* Hidden container for PDF capture of current result */}
-          <div className="fixed left-0 top-0 w-[210mm] opacity-0 pointer-events-none">
+          <div className="fixed left-[-9999px] top-0 w-[210mm] pdf-export-container">
             <div id="current-grading-result" className="bg-white p-10 space-y-8">
               <div className="flex items-center justify-between border-b border-stone-100 pb-6">
                 <div>
@@ -2463,74 +2496,6 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
   );
 }
 
-const generatePDFFromElement = async (element: HTMLElement, fileName: string) => {
-  try {
-    // Ensure all images are loaded before capturing
-    const images = element.getElementsByTagName('img');
-    await Promise.all(Array.from(images).map(img => {
-      if (img.complete) return Promise.resolve();
-      return new Promise((resolve) => {
-        img.onload = resolve;
-        img.onerror = resolve;
-      });
-    }));
-
-    // Small delay to ensure styles are applied
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    const canvas = await html2canvas(element, {
-      scale: 1, // Reduced scale for better compatibility and memory usage
-      useCORS: true,
-      allowTaint: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-      onclone: (clonedDoc, clonedElement) => {
-        // Ensure the cloned element is visible and properly styled for capture
-        if (clonedElement instanceof HTMLElement) {
-          clonedElement.style.position = 'static';
-          clonedElement.style.visibility = 'visible';
-          clonedElement.style.display = 'block';
-          clonedElement.style.opacity = '1';
-          clonedElement.style.width = '210mm'; // Standard A4 width
-          clonedElement.style.margin = '0';
-          clonedElement.style.padding = '20mm';
-        }
-      }
-    });
-    
-    const imgData = canvas.toDataURL('image/jpeg', 0.7); 
-    const pdf = new jsPDF({
-      orientation: 'p',
-      unit: 'mm',
-      format: 'a4'
-    });
-    
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const imgProps = pdf.getImageProperties(imgData);
-    const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-    
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    let heightLeft = pdfHeight;
-    let position = 0;
-
-    // Add first page
-    pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
-    heightLeft -= pageHeight;
-
-    // Add subsequent pages if content is longer than one page
-    while (heightLeft > 0) {
-      position = heightLeft - pdfHeight;
-      pdf.addPage();
-      pdf.addImage(imgData, 'JPEG', 0, position, pdfWidth, pdfHeight);
-      heightLeft -= pageHeight;
-    }
-
-    pdf.save(fileName);
-  } catch (error) {
-    console.error('Error generating PDF:', error);
-    alert('حدث خطأ أثناء إنشاء ملف PDF. يرجى المحاولة مرة أخرى.');
-  }
-};
 
 function ResultsView({ results, sessions, exams, onBack }: any) {
   const [selectedResult, setSelectedResult] = useState<any>(null);
@@ -2544,19 +2509,26 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
   const allResultsPrintRef = useRef<HTMLDivElement>(null);
 
   const exportPDF = async (result: any) => {
+    console.log(`[ResultsView] Exporting PDF for student: ${result.studentName}`);
     setIsExporting(true);
     try {
       const element = document.getElementById(`print-result-${result.id}`);
+      console.log(`[ResultsView] Element found by ID: ${!!element}`);
+      
       if (!element) {
         if (selectedResult?.id === result.id && resultPrintRef.current) {
+          console.log(`[ResultsView] Using resultPrintRef.current`);
           await generatePDFFromElement(resultPrintRef.current, `${result.studentName}_result.pdf`);
         } else {
+          console.warn(`[ResultsView] Element not found and no ref available`);
           alert('يرجى فتح تفاصيل الطالب أولاً لتحميل الملف، أو استخدم زر "تحميل الكل"');
         }
         return;
       }
       
       await generatePDFFromElement(element, `${result.studentName}_result.pdf`);
+    } catch (error) {
+      console.error(`[ResultsView] Error in exportPDF:`, error);
     } finally {
       setIsExporting(false);
     }
@@ -2697,7 +2669,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
         </div>
 
         {/* Hidden area for printing all results */}
-        <div className="fixed left-0 top-0 w-[210mm] opacity-0 pointer-events-none pdf-export-container" ref={allResultsPrintRef}>
+        <div className="fixed left-[-9999px] top-0 w-[210mm] pdf-export-container" ref={allResultsPrintRef}>
           {sessionResults.map((res: any) => (
             <div key={res.id} className="bg-white p-10 mb-10 border-b-2" style={{ pageBreakAfter: 'always' }}>
               <div className="flex items-center justify-between border-b border-stone-100 pb-6 mb-8">
@@ -2727,7 +2699,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
         </div>
 
         {/* Hidden area for individual printing from list */}
-        <div className="fixed left-0 top-0 w-[210mm] opacity-0 pointer-events-none pdf-export-container">
+        <div className="fixed left-[-9999px] top-0 w-[210mm] pdf-export-container">
           {sessionResults.map((res: any) => (
             <div key={res.id} id={`print-result-${res.id}`} className="bg-white p-10">
                <div className="flex items-center justify-between border-b border-stone-100 pb-6 mb-8">
