@@ -143,13 +143,18 @@ const generatePDFFromElement = async (element: HTMLElement, fileName: string, op
   try {
     console.log(`[PDF] Starting generation for: ${fileName}, ignoreImages: ${!!options.ignoreImages}`);
     
-    // Check if element is valid and has dimensions
-    if (!element || element.offsetHeight === 0) {
-      console.error('[PDF] Element is invalid or has no height');
-      if (element) {
-        element.style.position = 'relative';
-        element.style.left = '0';
-      }
+    // Check if element is valid
+    if (!element) {
+      throw new Error('العنصر المطلوب تصويره غير موجود');
+    }
+
+    // Ensure element has some visibility/dimensions for html2canvas
+    const originalStyle = element.style.cssText;
+    if (element.offsetHeight === 0) {
+      console.warn('[PDF] Element has 0 height, attempting to force dimensions');
+      element.style.display = 'block';
+      element.style.visibility = 'visible';
+      element.style.position = 'relative';
     }
 
     // Ensure all images are loaded before capturing (only if not ignoring them)
@@ -165,15 +170,15 @@ const generatePDFFromElement = async (element: HTMLElement, fileName: string, op
     }
 
     // Small delay to ensure styles and images are fully rendered
-    await new Promise(resolve => setTimeout(resolve, options.ignoreImages ? 500 : 1000));
+    await new Promise(resolve => setTimeout(resolve, options.ignoreImages ? 600 : 1200));
 
     const canvas = await html2canvas(element, {
       scale: 2, 
       useCORS: !options.ignoreImages,
       allowTaint: false, 
-      logging: false,
+      logging: true, // Enable logging for debugging
       backgroundColor: '#ffffff',
-      windowWidth: options.useElementWidth ? element.scrollWidth : 1200,
+      windowWidth: options.useElementWidth ? (element.scrollWidth || 1200) : 1200,
       onclone: (clonedDoc, clonedElement) => {
         if (clonedElement instanceof HTMLElement) {
           clonedElement.style.position = 'static';
@@ -203,8 +208,17 @@ const generatePDFFromElement = async (element: HTMLElement, fileName: string, op
       }
     });
     
-    const imgData = canvas.toDataURL('image/jpeg', 0.95); 
-    if (imgData === 'data:,') throw new Error('فشل التقاط محتوى الصفحة (Canvas Empty)');
+    // Restore original style if modified
+    if (originalStyle) {
+      element.style.cssText = originalStyle;
+    }
+
+    if (canvas.width === 0 || canvas.height === 0) {
+      throw new Error(`أبعاد الصفحة غير صالحة (W: ${canvas.width}, H: ${canvas.height})`);
+    }
+
+    const imgData = canvas.toDataURL('image/jpeg', 0.9); 
+    if (imgData === 'data:,') throw new Error('فشل استخراج بيانات الصورة من الصفحة');
 
     const pdf = new jsPDF({
       orientation: 'p',
@@ -234,7 +248,8 @@ const generatePDFFromElement = async (element: HTMLElement, fileName: string, op
     console.log(`[PDF] Successfully saved: ${fileName}`);
   } catch (error) {
     console.error('Error generating PDF:', error);
-    alert('عذراً، حدث خطأ تقني أثناء إنشاء ملف PDF. يرجى التأكد من تحميل جميع الصور والمحاولة مرة أخرى.');
+    const errorMsg = error instanceof Error ? error.message : 'خطأ غير معروف';
+    alert(`عذراً، حدث خطأ تقني أثناء إنشاء ملف PDF: ${errorMsg}. يرجى محاولة فتح تفاصيل الطالب أولاً ثم التحميل.`);
   }
 };
 
@@ -2485,7 +2500,7 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
           </AnimatePresence>
 
           {/* Hidden container for PDF capture of current result */}
-          <div className="fixed left-[-9999px] top-0 w-[210mm] pdf-export-container">
+          <div className="fixed top-[-9999px] left-0 w-[210mm] pdf-export-container">
             <div id="current-grading-result" className="bg-white p-10 space-y-8">
               <div className="flex items-center justify-between border-b border-stone-100 pb-6">
                 <div>
@@ -2691,7 +2706,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
         </div>
 
         {/* Hidden area for printing all results */}
-        <div className="fixed left-[-9999px] top-0 w-[210mm] pdf-export-container" ref={allResultsPrintRef}>
+        <div className="fixed top-[-9999px] left-0 w-[210mm] pdf-export-container" ref={allResultsPrintRef}>
           {sessionResults.map((res: any) => (
             <div key={res.id} className="bg-white p-10 mb-10 border-b-2" style={{ pageBreakAfter: 'always' }}>
               <div className="flex items-center justify-between border-b border-stone-100 pb-6 mb-8">
@@ -2721,7 +2736,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
         </div>
 
         {/* Hidden area for individual printing from list */}
-        <div className="fixed left-[-9999px] top-0 w-[210mm] pdf-export-container">
+        <div className="fixed top-[-9999px] left-0 w-[210mm] pdf-export-container">
           {sessionResults.map((res: any) => (
             <div key={res.id} id={`print-result-list-${res.id}`} className="bg-white p-10">
                <div className="flex items-center justify-between border-b border-stone-100 pb-6 mb-8">
