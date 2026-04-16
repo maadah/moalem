@@ -191,6 +191,64 @@ const generatePDFFromElement = async (element: HTMLElement, fileName: string, op
           if (options.padding) {
             clonedElement.style.padding = options.padding;
           }
+
+          // Aggressively remove oklch from all elements in the clone
+          // html2canvas fails when it encounters oklch() in computed styles
+          const allElements = clonedElement.querySelectorAll('*');
+          allElements.forEach(el => {
+            if (el instanceof HTMLElement) {
+              // Remove any inline styles that might use oklch
+              const style = el.getAttribute('style');
+              if (style && style.includes('oklch')) {
+                el.setAttribute('style', style.replace(/oklch\([^)]+\)/g, '#888'));
+              }
+            }
+          });
+
+          // Remove problematic CSS rules from the cloned document to prevent html2canvas from crashing
+          try {
+            const styleSheets = Array.from(clonedDoc.styleSheets);
+            styleSheets.forEach(sheet => {
+              try {
+                const rules = Array.from(sheet.cssRules);
+                for (let i = rules.length - 1; i >= 0; i--) {
+                  if (rules[i].cssText.includes('oklch')) {
+                    sheet.deleteRule(i);
+                  }
+                }
+              } catch (e) { /* Ignore cross-origin sheet errors */ }
+            });
+          } catch (e) { /* Ignore global errors */ }
+
+          // Inject a style tag to override Tailwind 4's oklch variables with safe hex values
+          const styleTag = clonedDoc.createElement('style');
+          styleTag.innerHTML = `
+            :root, * {
+              --color-stone-50: #fafaf9 !important;
+              --color-stone-100: #f5f5f4 !important;
+              --color-stone-200: #e7e5e4 !important;
+              --color-stone-300: #d6d3d1 !important;
+              --color-stone-400: #a8a29e !important;
+              --color-stone-500: #78716c !important;
+              --color-stone-600: #57534e !important;
+              --color-stone-700: #44403c !important;
+              --color-stone-800: #292524 !important;
+              --color-stone-900: #1c1917 !important;
+              --color-emerald-50: #ecfdf5 !important;
+              --color-emerald-100: #d1fae5 !important;
+              --color-emerald-600: #059669 !important;
+              --color-emerald-700: #047857 !important;
+              --color-emerald-800: #065f46 !important;
+              --color-red-500: #ef4444 !important;
+              --color-red-600: #dc2626 !important;
+            }
+            /* Force hex for common classes */
+            .bg-emerald-600 { background-color: #059669 !important; }
+            .text-emerald-600 { color: #059669 !important; }
+            .bg-stone-900 { background-color: #1c1917 !important; }
+            .text-stone-900 { color: #1c1917 !important; }
+          `;
+          clonedDoc.head.appendChild(styleTag);
           
           const clonedImages = clonedElement.getElementsByTagName('img');
           for (let i = 0; i < clonedImages.length; i++) {

@@ -20,8 +20,11 @@
   --tw-text-opacity: 1 !important;
   --tw-border-opacity: 1 !important;
   box-shadow: none !important;
-  /* Override potential oklch variables from Tailwind 4 */
+  
+  /* Force hex/rgb for common Tailwind 4 variables to avoid oklch parsing errors */
   --color-white: #ffffff !important;
+  --color-black: #000000 !important;
+  
   --color-stone-50: #fafaf9 !important;
   --color-stone-100: #f5f5f4 !important;
   --color-stone-200: #e7e5e4 !important;
@@ -32,34 +35,105 @@
   --color-stone-700: #44403c !important;
   --color-stone-800: #292524 !important;
   --color-stone-900: #1c1917 !important;
+  
   --color-emerald-50: #ecfdf5 !important;
   --color-emerald-100: #d1fae5 !important;
+  --color-emerald-200: #a7f3d0 !important;
+  --color-emerald-300: #6ee7b7 !important;
+  --color-emerald-400: #34d399 !important;
+  --color-emerald-500: #10b981 !important;
   --color-emerald-600: #059669 !important;
   --color-emerald-700: #047857 !important;
   --color-emerald-800: #065f46 !important;
+  --color-emerald-900: #064e3b !important;
+  --color-emerald-950: #022c22 !important;
+
+  --color-red-50: #fef2f2 !important;
+  --color-red-100: #fee2e2 !important;
+  --color-red-500: #ef4444 !important;
+  --color-red-600: #dc2626 !important;
+  
+  /* Reset any oklch based background/text/border colors */
+  background-color: inherit;
+  color: inherit;
+  border-color: inherit;
 }
 
+/* Explicit class overrides for common patterns */
 .pdf-export-container .bg-white { background-color: #ffffff !important; }
 .pdf-export-container .bg-stone-50 { background-color: #fafaf9 !important; }
 .pdf-export-container .bg-stone-100 { background-color: #f5f5f4 !important; }
-.pdf-export-container .bg-emerald-50 { background-color: #ecfdf5 !important; }
-.pdf-export-container .bg-emerald-600 { background-color: #059669 !important; }
+.pdf-export-container .bg-stone-200 { background-color: #e7e5e4 !important; }
+.pdf-export-container .bg-stone-300 { background-color: #d6d3d1 !important; }
+.pdf-export-container .bg-stone-400 { background-color: #a8a29e !important; }
+.pdf-export-container .bg-stone-500 { background-color: #78716c !important; }
+.pdf-export-container .bg-stone-600 { background-color: #57534e !important; }
+.pdf-export-container .bg-stone-700 { background-color: #44403c !important; }
+.pdf-export-container .bg-stone-800 { background-color: #292524 !important; }
 .pdf-export-container .bg-stone-900 { background-color: #1c1917 !important; }
+.pdf-export-container .bg-emerald-50 { background-color: #ecfdf5 !important; }
+.pdf-export-container .bg-emerald-100 { background-color: #d1fae5 !important; }
+.pdf-export-container .bg-emerald-200 { background-color: #a7f3d0 !important; }
+.pdf-export-container .bg-emerald-300 { background-color: #6ee7b7 !important; }
+.pdf-export-container .bg-emerald-400 { background-color: #34d399 !important; }
+.pdf-export-container .bg-emerald-500 { background-color: #10b981 !important; }
+.pdf-export-container .bg-emerald-600 { background-color: #059669 !important; }
+.pdf-export-container .bg-emerald-700 { background-color: #047857 !important; }
+.pdf-export-container .bg-emerald-800 { background-color: #065f46 !important; }
+.pdf-export-container .bg-emerald-900 { background-color: #064e3b !important; }
+.pdf-export-container .bg-red-50 { background-color: #fef2f2 !important; }
+.pdf-export-container .bg-red-100 { background-color: #fee2e2 !important; }
+.pdf-export-container .bg-red-500 { background-color: #ef4444 !important; }
+.pdf-export-container .bg-red-600 { background-color: #dc2626 !important; }
 
 .pdf-export-container .text-white { color: #ffffff !important; }
+.pdf-export-container .text-black { color: #000000 !important; }
+.pdf-export-container .text-emerald-50 { color: #ecfdf5 !important; }
+.pdf-export-container .text-emerald-100 { color: #d1fae5 !important; }
+.pdf-export-container .text-emerald-200 { color: #a7f3d0 !important; }
+.pdf-export-container .text-emerald-300 { color: #6ee7b7 !important; }
+.pdf-export-container .text-emerald-400 { color: #34d399 !important; }
+.pdf-export-container .text-emerald-500 { color: #10b981 !important; }
 .pdf-export-container .text-emerald-600 { color: #059669 !important; }
+.pdf-export-container .text-emerald-700 { color: #047857 !important; }
 .pdf-export-container .text-emerald-800 { color: #065f46 !important; }
+.pdf-export-container .text-emerald-900 { color: #064e3b !important; }
+.pdf-export-container .text-stone-50 { color: #fafaf9 !important; }
+.pdf-export-container .text-stone-100 { color: #f5f5f4 !important; }
+.pdf-export-container .text-stone-200 { color: #e7e5e4 !important; }
 .pdf-export-container .text-stone-300 { color: #d6d3d1 !important; }
 .pdf-export-container .text-stone-400 { color: #a8a29e !important; }
 .pdf-export-container .text-stone-500 { color: #78716c !important; }
 .pdf-export-container .text-stone-600 { color: #57534e !important; }
+.pdf-export-container .text-stone-700 { color: #44403c !important; }
+.pdf-export-container .text-stone-800 { color: #292524 !important; }
 .pdf-export-container .text-stone-900 { color: #1c1917 !important; }
+.pdf-export-container .text-red-50 { color: #fef2f2 !important; }
+.pdf-export-container .text-red-100 { color: #fee2e2 !important; }
+.pdf-export-container .text-red-500 { color: #ef4444 !important; }
+.pdf-export-container .text-red-600 { color: #dc2626 !important; }
 
+.pdf-export-container .border-stone-50 { border-color: #fafaf9 !important; }
 .pdf-export-container .border-stone-100 { border-color: #f5f5f4 !important; }
 .pdf-export-container .border-stone-200 { border-color: #e7e5e4 !important; }
+.pdf-export-container .border-stone-300 { border-color: #d6d3d1 !important; }
+.pdf-export-container .border-stone-400 { border-color: #a8a29e !important; }
+.pdf-export-container .border-stone-500 { border-color: #78716c !important; }
+.pdf-export-container .border-stone-600 { border-color: #57534e !important; }
+.pdf-export-container .border-stone-700 { border-color: #44403c !important; }
+.pdf-export-container .border-stone-800 { border-color: #292524 !important; }
 .pdf-export-container .border-stone-900 { border-color: #1c1917 !important; }
+.pdf-export-container .border-emerald-50 { border-color: #ecfdf5 !important; }
 .pdf-export-container .border-emerald-100 { border-color: #d1fae5 !important; }
-.pdf-export-container .border-b-2 { border-bottom-width: 2px !important; }
-.pdf-export-container .border { border-width: 1px !important; }
-.pdf-export-container .border-b { border-bottom-width: 1px !important; }
-.pdf-export-container .border-t { border-top-width: 1px !important; }
+.pdf-export-container .border-emerald-200 { border-color: #a7f3d0 !important; }
+.pdf-export-container .border-emerald-300 { border-color: #6ee7b7 !important; }
+.pdf-export-container .border-emerald-400 { border-color: #34d399 !important; }
+.pdf-export-container .border-emerald-500 { border-color: #10b981 !important; }
+.pdf-export-container .border-emerald-600 { border-color: #059669 !important; }
+.pdf-export-container .border-emerald-700 { border-color: #047857 !important; }
+.pdf-export-container .border-emerald-800 { border-color: #065f46 !important; }
+.pdf-export-container .border-emerald-900 { border-color: #064e3b !important; }
+.pdf-export-container .border-red-50 { border-color: #fef2f2 !important; }
+.pdf-export-container .border-red-100 { border-color: #fee2e2 !important; }
+.pdf-export-container .border-red-500 { border-color: #ef4444 !important; }
+.pdf-export-container .border-red-600 { border-color: #dc2626 !important; }
