@@ -653,7 +653,7 @@ function App() {
         <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
           <div className="flex items-center gap-8">
             <h1 
-              className="text-xl font-bold font-serif italic cursor-pointer"
+              className="text-lg md:text-xl font-bold font-serif italic cursor-pointer whitespace-nowrap"
               onClick={() => setView('dashboard')}
             >
               المصحح الذكي
@@ -697,9 +697,9 @@ function App() {
                 <Settings className="w-5 h-5" />
               </button>
             )}
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-stone-100 rounded-full">
+            <div className="flex items-center gap-2 px-1.5 md:px-3 py-1.5 bg-stone-100 rounded-full">
               <img src={user.photoURL || ''} alt="" className="w-6 h-6 rounded-full" />
-              <span className="text-sm font-medium">{user.displayName}</span>
+              <span className="hidden sm:inline text-sm font-medium">{user.displayName}</span>
             </div>
             <button onClick={logout} className="p-2 text-stone-400 hover:text-red-500 transition-colors">
               <LogOut className="w-5 h-5" />
@@ -708,7 +708,19 @@ function App() {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto p-4 md:p-8">
+      {/* Bottom Navigation for Mobile */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-md border-t border-stone-200 z-50 px-2 py-1 pb-safe shadow-[0_-4px_20px_rgba(0,0,0,0.03)]">
+        <div className="flex items-center justify-around max-w-md mx-auto">
+          <NavButton mobile active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<LayoutGrid className="w-5 h-5" />} label="الرئيسية" />
+          <NavButton mobile active={view === 'create-exam'} onClick={() => setView('create-exam')} icon={<Plus className="w-5 h-5" />} label="امتحان" />
+          <NavButton mobile active={view === 'results'} onClick={() => setView('results')} icon={<List className="w-5 h-5" />} label="النتائج" />
+          {userProfile?.role === 'admin' && (
+            <NavButton mobile active={view === 'admin'} onClick={() => setView('admin')} icon={<Users className="w-5 h-5" />} label="الإدارة" />
+          )}
+        </div>
+      </nav>
+
+      <main className="max-w-7xl mx-auto p-4 md:p-8 pb-24 md:pb-8">
         <AnimatePresence mode="wait">
           {view === 'dashboard' && (
             <Dashboard 
@@ -805,9 +817,9 @@ function AdminDashboard() {
       animate={{ opacity: 1, y: 0 }}
       className="space-y-8"
     >
-      <div className="flex items-center justify-between">
-        <h2 className="text-3xl font-bold font-serif italic">لوحة تحكم المدير</h2>
-        <div className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-sm font-bold">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <h2 className="text-2xl md:text-3xl font-bold font-serif italic">لوحة تحكم المدير</h2>
+        <div className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-sm font-bold w-fit">
           إجمالي المستخدمين: {users.length}
         </div>
       </div>
@@ -1042,17 +1054,24 @@ function ImageUpload({
   );
 }
 
-function NavButton({ active, onClick, icon, label }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string }) {
+function NavButton({ active, onClick, icon, label, mobile = false }: { active: boolean, onClick: () => void, icon: React.ReactNode, label: string, mobile?: boolean }) {
   return (
     <button 
       onClick={onClick}
       className={cn(
-        "flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-all",
-        active ? "bg-emerald-50 text-emerald-700" : "text-stone-500 hover:bg-stone-100"
+        "flex items-center transition-all",
+        mobile 
+          ? "flex-col gap-1 px-2 py-1 flex-1" 
+          : "gap-2 px-4 py-2 rounded-xl text-sm font-medium",
+        active 
+          ? (mobile ? "text-emerald-600" : "bg-emerald-50 text-emerald-700") 
+          : "text-stone-500 hover:bg-stone-100"
       )}
     >
-      {icon}
-      {label}
+      <div className={cn(mobile && "p-1 rounded-lg", active && mobile && "bg-emerald-50")}>
+        {icon}
+      </div>
+      <span className={cn(mobile ? "text-[10px] font-bold" : "text-sm")}>{label}</span>
     </button>
   );
 }
@@ -1065,14 +1084,14 @@ function Dashboard({ exams, onNewExam, onGrade, onEditExam, onDeleteExam }: any)
       exit={{ opacity: 0, y: -20 }}
       className="space-y-8"
     >
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold font-serif italic mb-1">مرحباً بك مجدداً</h2>
-          <p className="text-stone-500">إليك الامتحانات التي قمت بإنشائها</p>
+          <h2 className="text-2xl md:text-3xl font-bold font-serif italic mb-1">مرحباً بك مجدداً</h2>
+          <p className="text-sm md:text-base text-stone-500">إليك الامتحانات التي قمت بإنشائها</p>
         </div>
         <button 
           onClick={onNewExam}
-          className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-medium flex items-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20"
+          className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-medium flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20 w-full md:w-auto"
         >
           <Plus className="w-5 h-5" />
           امتحان جديد
@@ -1487,11 +1506,11 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
       exit={{ opacity: 0, x: -20 }}
       className="max-w-4xl mx-auto space-y-8"
     >
-      <div className="flex items-center justify-between" data-html2canvas-ignore>
-        <h2 className="text-3xl font-bold font-serif italic">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4" data-html2canvas-ignore>
+        <h2 className="text-2xl md:text-3xl font-bold font-serif italic">
           {initialData ? 'تعديل الامتحان' : 'إنشاء امتحان جديد'}
         </h2>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 md:gap-3">
           <button 
             onClick={() => {
               if (userProfile && (userProfile.pagesUsed + extractionImages.length) > userProfile.pageLimit) {
@@ -2873,12 +2892,12 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
       animate={{ opacity: 1, y: 0 }}
       className="space-y-8"
     >
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-3xl font-bold font-serif italic">نتائج الطلاب</h2>
-          <p className="text-stone-500">مجموعات التصحيح المنظمة حسب التاريخ</p>
+          <h2 className="text-2xl md:text-3xl font-bold font-serif italic">نتائج الطلاب</h2>
+          <p className="text-sm md:text-base text-stone-500">مجموعات التصحيح المنظمة حسب التاريخ</p>
         </div>
-        <button onClick={onBack} className="text-stone-400 hover:text-stone-900 transition-colors">العودة</button>
+        <button onClick={onBack} className="text-stone-400 hover:text-stone-900 transition-colors w-fit">العودة</button>
       </div>
 
       {/* Filters */}
