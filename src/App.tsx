@@ -139,9 +139,20 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 }
 
 // --- PDF Generation Utility ---
-const generatePDFFromElement = async (element: HTMLElement, fileName: string) => {
+const generatePDFFromElement = async (element: HTMLElement, fileName: string, options: { padding?: string, useElementWidth?: boolean } = {}) => {
   try {
     console.log(`[PDF] Starting generation for: ${fileName}`);
+    
+    // Check if element is valid and has dimensions
+    if (!element || element.offsetHeight === 0) {
+      console.error('[PDF] Element is invalid or has no height');
+      // If it's a hidden element, it might need a temporary display change
+      if (element) {
+        element.style.position = 'relative';
+        element.style.left = '0';
+      }
+    }
+
     // Ensure all images are loaded before capturing
     const images = element.getElementsByTagName('img');
     await Promise.all(Array.from(images).map(img => {
@@ -152,17 +163,16 @@ const generatePDFFromElement = async (element: HTMLElement, fileName: string) =>
       });
     }));
 
-    // Small delay to ensure styles are applied
-    await new Promise(resolve => setTimeout(resolve, 800));
+    // Small delay to ensure styles and images are fully rendered
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     const canvas = await html2canvas(element, {
-      scale: 2, // High quality
+      scale: 2, 
       useCORS: true,
-      allowTaint: false,
+      allowTaint: true, // Allow taint as fallback for non-CORS images
       logging: false,
       backgroundColor: '#ffffff',
-      windowWidth: element.scrollWidth || 1200,
-      windowHeight: element.scrollHeight || 1600,
+      windowWidth: options.useElementWidth ? element.scrollWidth : 1200,
       onclone: (clonedDoc, clonedElement) => {
         if (clonedElement instanceof HTMLElement) {
           clonedElement.style.position = 'static';
@@ -171,11 +181,18 @@ const generatePDFFromElement = async (element: HTMLElement, fileName: string) =>
           clonedElement.style.opacity = '1';
           clonedElement.style.width = '210mm';
           clonedElement.style.margin = '0';
-          clonedElement.style.padding = '20mm';
+          
+          // Only apply padding if explicitly requested, otherwise keep original
+          if (options.padding) {
+            clonedElement.style.padding = options.padding;
+          }
           
           const clonedImages = clonedElement.getElementsByTagName('img');
           for (let i = 0; i < clonedImages.length; i++) {
-            clonedImages[i].crossOrigin = 'anonymous';
+            // Don't force crossOrigin if it's a data URL
+            if (!clonedImages[i].src.startsWith('data:')) {
+              clonedImages[i].crossOrigin = 'anonymous';
+            }
             clonedImages[i].style.display = 'block';
             clonedImages[i].style.maxWidth = '100%';
           }
@@ -184,7 +201,7 @@ const generatePDFFromElement = async (element: HTMLElement, fileName: string) =>
     });
     
     const imgData = canvas.toDataURL('image/jpeg', 0.95); 
-    if (imgData === 'data:,') throw new Error('Canvas capture failed');
+    if (imgData === 'data:,') throw new Error('فشل التقاط محتوى الصفحة (Canvas Empty)');
 
     const pdf = new jsPDF({
       orientation: 'p',
@@ -214,7 +231,7 @@ const generatePDFFromElement = async (element: HTMLElement, fileName: string) =>
     console.log(`[PDF] Successfully saved: ${fileName}`);
   } catch (error) {
     console.error('Error generating PDF:', error);
-    alert('عذراً، حدث خطأ أثناء إنشاء ملف PDF. يرجى التأكد من اتصال الإنترنت والمحاولة مرة أخرى.');
+    alert('عذراً، حدث خطأ تقني أثناء إنشاء ملف PDF. يرجى التأكد من تحميل جميع الصور والمحاولة مرة أخرى.');
   }
 };
 
@@ -1380,7 +1397,8 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
     
     setIsPrinting(true);
     try {
-      await generatePDFFromElement(ref.current, `${title || 'exam'}_${mode}.pdf`);
+      // For exams, we don't force extra padding because the template has p-12
+      await generatePDFFromElement(ref.current, `${title || 'exam'}_${mode}.pdf`, { useElementWidth: true });
     } finally {
       setIsPrinting(false);
     }
@@ -2366,7 +2384,7 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
                   onClick={async () => {
                     const element = document.getElementById(`current-grading-result`);
                     if (element) {
-                      await generatePDFFromElement(element, `${currentGrading.studentName}_نتيجة.pdf`);
+                      await generatePDFFromElement(element, `${currentGrading.studentName}_نتيجة.pdf`, { padding: '20mm' });
                     }
                   }}
                   className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-2"
@@ -2518,7 +2536,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
       if (!element) {
         if (selectedResult?.id === result.id && resultPrintRef.current) {
           console.log(`[ResultsView] Using resultPrintRef.current`);
-          await generatePDFFromElement(resultPrintRef.current, `${result.studentName}_result.pdf`);
+          await generatePDFFromElement(resultPrintRef.current, `${result.studentName}_result.pdf`, { padding: '20mm' });
         } else {
           console.warn(`[ResultsView] Element not found and no ref available`);
           alert('يرجى فتح تفاصيل الطالب أولاً لتحميل الملف، أو استخدم زر "تحميل الكل"');
@@ -2526,7 +2544,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
         return;
       }
       
-      await generatePDFFromElement(element, `${result.studentName}_result.pdf`);
+      await generatePDFFromElement(element, `${result.studentName}_result.pdf`, { padding: '20mm' });
     } catch (error) {
       console.error(`[ResultsView] Error in exportPDF:`, error);
     } finally {
