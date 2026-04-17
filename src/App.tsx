@@ -1606,46 +1606,48 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
           />
           <button onClick={onCancel} className="px-6 py-2 rounded-xl text-stone-500 hover:bg-stone-100 transition-colors">إلغاء</button>
           
-          <div className="relative">
-            <button 
-              onClick={() => setShowPrintMenu(!showPrintMenu)}
-              disabled={isPrinting}
-              className="px-6 py-2 rounded-xl bg-stone-900 text-white flex items-center gap-2 hover:bg-stone-800 disabled:opacity-50"
-            >
-              {isPrinting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              تحميل PDF
-              <ChevronDown className={cn("w-4 h-4 transition-transform", showPrintMenu && "rotate-180")} />
-            </button>
-            <AnimatePresence>
-              {showPrintMenu && (
-                <motion.div 
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-stone-100 py-2 z-50"
-                >
-                  <button 
-                    onClick={() => {
-                      printExam('questions');
-                      setShowPrintMenu(false);
-                    }}
-                    className="w-full text-right px-4 py-2 text-sm hover:bg-stone-50 text-stone-700"
+          {questions.length > 0 && (
+            <div className="relative">
+              <button 
+                onClick={() => setShowPrintMenu(!showPrintMenu)}
+                disabled={isPrinting}
+                className="px-6 py-2 rounded-xl bg-stone-900 text-white flex items-center gap-2 hover:bg-stone-800 disabled:opacity-50"
+              >
+                {isPrinting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                تحميل نسخة الأسئلة (PDF)
+                <ChevronDown className={cn("w-4 h-4 transition-transform", showPrintMenu && "rotate-180")} />
+              </button>
+              <AnimatePresence>
+                {showPrintMenu && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 10 }}
+                    className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-stone-100 py-2 z-50"
                   >
-                    تحميل الأسئلة فقط
-                  </button>
-                  <button 
-                    onClick={() => {
-                      printExam('both');
-                      setShowPrintMenu(false);
-                    }}
-                    className="w-full text-right px-4 py-2 text-sm hover:bg-stone-50 text-stone-700 border-t border-stone-50"
-                  >
-                    تحميل الأسئلة والأجوبة
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+                    <button 
+                      onClick={() => {
+                        printExam('questions');
+                        setShowPrintMenu(false);
+                      }}
+                      className="w-full text-right px-4 py-2 text-sm hover:bg-stone-50 text-stone-700"
+                    >
+                      تحميل الأسئلة فقط
+                    </button>
+                    <button 
+                      onClick={() => {
+                        printExam('both');
+                        setShowPrintMenu(false);
+                      }}
+                      className="w-full text-right px-4 py-2 text-sm hover:bg-stone-50 text-stone-700 border-t border-stone-50"
+                    >
+                      تحميل الأسئلة والأجوبة
+                    </button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
 
           <button 
             onClick={saveExam} 
@@ -2548,7 +2550,7 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
                   className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-2"
                 >
                   <Download className="w-4 h-4" />
-                  تحميل PDF
+                  تحميل النتيجة (PDF)
                 </button>
                 <button onClick={() => setGradingResults([])} className="px-6 py-2 rounded-xl text-stone-500 hover:bg-stone-100 transition-colors">إعادة التصحيح</button>
                 <button onClick={() => setShowSaveModal(true)} className="px-8 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-600/20">حفظ جميع النتائج</button>
@@ -2783,7 +2785,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
             className="bg-emerald-600 text-white px-6 py-2 rounded-xl flex items-center gap-2 hover:bg-emerald-700 transition-colors disabled:opacity-50"
           >
             {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-            تحميل PDF
+            تحميل تقرير النتيجة (PDF)
           </button>
         </div>
 
@@ -2934,7 +2936,7 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
                       <button 
                         onClick={() => exportPDF(res)}
                         className="p-2 text-stone-300 hover:text-emerald-600 transition-colors"
-                        title="تحميل PDF"
+                        title="تحميل النتيجة PDF"
                       >
                         <Download className="w-5 h-5" />
                       </button>
