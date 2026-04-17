@@ -176,33 +176,31 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     Analyze the provided images of an exam paper and extract EVERY SINGLE question, branch, and point into a structured JSON format.
     
     THINKING STEP:
-    1. Identify general exam instructions (e.g., "Answer 5 questions only", "Write equations where found").
+    1. Identify general exam instructions (e.g., "Answer 5 questions only").
     2. Mentally list all the main questions (e.g., س1, س2, س3, س4, س5, س6).
-    3. Ensure your JSON includes every single actual question, but excludes general instructions from the questions array.
+    3. For each main question, identify if it has branches (أ، ب، ج) or points (1، 2، 3).
+    4. Ensure your JSON reflects this hierarchy using "subQuestions".
     
-    CRITICAL: This is a full exam paper. You MUST scan the entire image from top to bottom and extract all questions. Do not stop after the first question.
-    
-    LANGUAGE RULE:
-    - All extracted text MUST be in Arabic.
-    
-    HIERARCHY RULES:
-    1. Level 1: Main Questions (e.g., س1، س2).
-    2. Level 2: Branches (e.g., A, B or أ، ب).
-    3. Level 3: Points (e.g., 1, 2, 3).
+    IRAQI EXAM FORMAT RULES:
+    - **"س1، س2، س3..."**: Level 1 (Top Level).
+    - **"أ، ب، ج، د..."**: Level 2. These are ALWAYS branches of the preceding "س" question. They MUST be in its "subQuestions" array.
+    - **"1، 2، 3، 4..."**: Level 3 (if following أ، ب) or Level 2 (if following "س" directly). They MUST be nested inside their logical parent.
+    - **CRITICAL HIERARCHY**:
+      - If you see "س1" and then "أ)", "أ)" is a child of "س1".
+      - If you see "أ)" and then "1)", "1)" is a child of "أ)".
+      - Do NOT extract children as separate top-level questions.
     
     CRITICAL EXTRACTION LOGIC:
-    - **GENERAL INSTRUCTIONS**: Text like "Answer 5 questions only" or "Write chemical equations" are general instructions. Use them to set "requiredQuestionsCount", but **DO NOT** include them as a question in the "questions" array.
-    - If a Question has Branches, the Question text is just a header.
-    - If a Branch has Points, the Branch text is just a header.
-    - ONLY the leaf nodes should have an "answer" field.
-    - For scientific formulas (Chemistry/Physics), extract them exactly as written (e.g., H2SO4, CO2).
+    - **GENERAL INSTRUCTIONS**: Text at the very top like "Answer all questions" or "Use clear handwriting" should set "requiredQuestionsCount" (if numeric) but NOT be a question.
+    - **CHOICE WORDS**: words like "خمسة فقط" (5 only), "اثنين فقط" (2 only), "فرعين فقط" (2 branches only) indicate a requirement. Use them to set "requiredSubCount" for that specific question or branch.
+    - **LEAF NODES**: The smallest items (lowest in hierarchy) are the ones that actually require an answer.
+    - **FORMULAS**: Extract formulas exactly (e.g., NaCl, H2O).
     
     EXTRACTION RULES:
-    - Extract "text", "grade" (if mentioned), and "type".
-    - Detect choice logic (e.g., "Answer 5 questions only") and set "requiredQuestionsCount" or "requiredSubCount".
-    - Generate unique IDs for every single item.
-    - **MANDATORY**: You MUST extract ALL questions visible in the images. Do not skip any. Scan the whole page.
-    - **JSON SAFETY**: Ensure all quotes are escaped. Do not include unescaped newlines within strings. Use \n for newlines.
+    - Extract "text", "grade", and "type" (usually "text" for these descriptive questions).
+    - Generate unique string IDs for everything.
+    - **MANDATORY**: You MUST scan the entire image from top-to-bottom and side-to-side. Do not stop early.
+    - **JSON SAFETY**: Escape all double quotes inside strings.
     
     OUTPUT FORMAT (JSON ONLY):
     {
@@ -212,13 +210,15 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
         {
           "id": "unique_id",
           "text": "Question text",
-          "answer": "Answer text (if found)",
           "grade": number,
           "type": "text|true-false|multiple-choice|fill-in-the-blanks",
-          "options": ["opt1", "opt2"],
-          "subStyle": "letters|numbers",
-          "requiredSubCount": number (optional),
-          "subQuestions": [ ... nested sub-questions ... ]
+          "subQuestions": [ 
+            {
+              "id": "sub_id",
+              "text": "Sub-question text",
+              "subQuestions": [ ... even deeper points if exist ... ]
+            }
+          ]
         }
       ]
     }
