@@ -1852,27 +1852,31 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
-                <div className="flex items-center gap-4">
-                  <span className="w-8 h-8 bg-white rounded-lg flex items-center justify-center font-bold text-stone-400 border border-stone-200">{index + 1}</span>
-                  <select 
-                    value={q.type} 
-                    onChange={(e) => updateQuestion(q.id, { type: e.target.value as any })}
-                    className="bg-white px-3 py-1.5 rounded-lg border border-stone-200 text-sm outline-none"
-                  >
-                    <option value="text">نصي</option>
-                    <option value="true-false">صح / خطأ</option>
-                    <option value="multiple-choice">اختيارات</option>
-                    <option value="fill-in-the-blanks">فراغات</option>
-                  </select>
-                  <div className="flex-1" />
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-stone-400">الدرجة:</span>
-                    <input 
-                      type="number" 
-                      value={q.grade} 
-                      onChange={(e) => updateQuestion(q.id, { grade: Number(e.target.value) })}
-                      className="w-16 px-2 py-1 rounded-lg border border-stone-200 text-sm text-center"
-                    />
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:gap-4">
+                  <div className="flex items-center gap-3">
+                    <span className="w-8 h-8 bg-white rounded-lg flex items-center justify-center font-bold text-stone-400 border border-stone-200 shrink-0">{index + 1}</span>
+                    <select 
+                      value={q.type} 
+                      onChange={(e) => updateQuestion(q.id, { type: e.target.value as any })}
+                      className="bg-white px-3 py-1.5 rounded-lg border border-stone-200 text-sm outline-none w-full sm:w-auto"
+                    >
+                      <option value="text">نصي</option>
+                      <option value="true-false">صح / خطأ</option>
+                      <option value="multiple-choice">اختيارات</option>
+                      <option value="fill-in-the-blanks">فراغات</option>
+                    </select>
+                  </div>
+                  <div className="hidden sm:block flex-1" />
+                  <div className="flex items-center justify-between sm:justify-end gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-stone-400">الدرجة:</span>
+                      <input 
+                        type="number" 
+                        value={q.grade} 
+                        onChange={(e) => updateQuestion(q.id, { grade: Number(e.target.value) })}
+                        className="w-16 px-2 py-1 rounded-lg border border-stone-200 text-sm text-center"
+                      />
+                    </div>
                   </div>
                 </div>
                 <textarea 
@@ -1892,7 +1896,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                 />
 
                 {(!q.subQuestions || q.subQuestions.length === 0) && (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <ImageUpload 
                       label="صورة السؤال" 
                       value={q.questionImage} 
@@ -1909,9 +1913,9 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                 )}
                 
                 {/* Sub-questions Section */}
-                <div className="mr-8 space-y-3 border-r-2 border-emerald-100 pr-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-4">
+                <div className="mr-4 md:mr-8 space-y-3 border-r-2 border-emerald-100 pr-3 md:pr-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                    <div className="flex items-center gap-3">
                       <span className="text-[10px] font-bold text-stone-400">
                         {q.subStyle === 'letters' ? 'الفروع والترك:' : 'النقاط/الفراغات والترك:'}
                       </span>
@@ -1951,65 +1955,71 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                   </div>
                   {q.subQuestions?.map((sq, sqIndex) => (
                     <div key={sq.id} className="p-4 bg-white rounded-xl border border-stone-100 space-y-3 relative group/sub shadow-sm">
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-bold text-emerald-600">
-                          {q.subStyle === 'letters' ? `(${String.fromCharCode(97 + sqIndex)})` : `${sqIndex + 1}-`}
-                        </span>
-                        <select 
-                          value={sq.type} 
-                          onChange={(e) => updateQuestion(sq.id, { type: e.target.value as any }, q.id)}
-                          className="bg-stone-50 px-2 py-1 rounded border border-stone-200 text-[10px] outline-none"
-                        >
-                          <option value="text">نصي</option>
-                          <option value="true-false">صح / خطأ</option>
-                          <option value="multiple-choice">اختيارات</option>
-                          <option value="fill-in-the-blanks">فراغات</option>
-                        </select>
-                        <textarea 
-                          value={sq.text} 
-                          onChange={(e) => {
-                            updateQuestion(sq.id, { text: e.target.value }, q.id);
-                            e.target.style.height = 'auto';
-                            e.target.style.height = e.target.scrollHeight + 'px';
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.height = 'auto';
-                            e.target.style.height = e.target.scrollHeight + 'px';
-                          }}
-                          placeholder="نص السؤال الفرعي..."
-                          rows={1}
-                          className="flex-1 bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-200 text-sm outline-none focus:ring-2 focus:ring-emerald-500 overflow-hidden resize-none"
-                        />
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                         <div className="flex items-center gap-2">
-                          <ImageUpload 
-                            label="صورة" 
-                            value={sq.questionImage} 
-                            onChange={(base64) => updateQuestion(sq.id, { questionImage: base64 }, q.id)}
-                            onRemove={() => updateQuestion(sq.id, { questionImage: undefined }, q.id)}
-                            compact
+                          <span className="text-xs font-bold text-emerald-600 shrink-0">
+                            {q.subStyle === 'letters' ? `(${String.fromCharCode(97 + sqIndex)})` : `${sqIndex + 1}-`}
+                          </span>
+                          <select 
+                            value={sq.type} 
+                            onChange={(e) => updateQuestion(sq.id, { type: e.target.value as any }, q.id)}
+                            className="bg-stone-50 px-2 py-1 rounded border border-stone-200 text-[10px] outline-none"
+                          >
+                            <option value="text">نصي</option>
+                            <option value="true-false">صح / خطأ</option>
+                            <option value="multiple-choice">اختيارات</option>
+                            <option value="fill-in-the-blanks">فراغات</option>
+                          </select>
+                        </div>
+                        <div className="flex flex-1 gap-2">
+                          <textarea 
+                            value={sq.text} 
+                            onChange={(e) => {
+                              updateQuestion(sq.id, { text: e.target.value }, q.id);
+                              e.target.style.height = 'auto';
+                              e.target.style.height = e.target.scrollHeight + 'px';
+                            }}
+                            onFocus={(e) => {
+                              e.target.style.height = 'auto';
+                              e.target.style.height = e.target.scrollHeight + 'px';
+                            }}
+                            placeholder="نص السؤال الفرعي..."
+                            rows={1}
+                            className="flex-1 bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-200 text-sm outline-none focus:ring-2 focus:ring-emerald-500 overflow-hidden resize-none"
                           />
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-stone-400">الدرجة:</span>
-                          <input 
-                            type="number" 
-                            value={sq.grade} 
-                            onChange={(e) => updateQuestion(sq.id, { grade: Number(e.target.value) }, q.id)}
-                            className="w-12 px-1 py-0.5 rounded-md border border-stone-200 text-xs text-center"
-                          />
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-2">
+                            <ImageUpload 
+                              label="صورة" 
+                              value={sq.questionImage} 
+                              onChange={(base64) => updateQuestion(sq.id, { questionImage: base64 }, q.id)}
+                              onRemove={() => updateQuestion(sq.id, { questionImage: undefined }, q.id)}
+                              compact
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-stone-400">الدرجة:</span>
+                            <input 
+                              type="number" 
+                              value={sq.grade} 
+                              onChange={(e) => updateQuestion(sq.id, { grade: Number(e.target.value) }, q.id)}
+                              className="w-12 px-1 py-0.5 rounded-md border border-stone-200 text-xs text-center"
+                            />
+                          </div>
+                          <button 
+                            onClick={() => removeQuestion(sq.id, q.id)}
+                            className="p-1 text-stone-400 sm:text-stone-300 hover:text-red-500 sm:opacity-0 sm:group-hover/sub:opacity-100 transition-all"
+                          >
+                            <Trash2 className="w-4 h-4 sm:w-3 sm:h-3" />
+                          </button>
                         </div>
-                        <button 
-                          onClick={() => removeQuestion(sq.id, q.id)}
-                          className="p-1 text-stone-300 hover:text-red-500 opacity-0 group-hover/sub:opacity-100 transition-all"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                        </button>
                       </div>
 
                       {/* Level 3: Points inside a Branch */}
-                      <div className="mr-6 space-y-2 border-r border-stone-200 pr-3">
+                      <div className="mr-4 md:mr-6 space-y-2 border-r border-stone-200 pr-3">
                         {sq.subQuestions && sq.subQuestions.length > 0 && (
-                          <div className="flex items-center justify-between mb-1">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
                             <span className="text-[9px] font-bold text-stone-400">النقاط والترك:</span>
                             <div className="flex items-center gap-2">
                               <span className="text-[9px] text-stone-400">عدد النقاط المطلوب حلها:</span>
@@ -2024,55 +2034,59 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                           </div>
                         )}
                         {sq.subQuestions?.map((ssq, ssqIndex) => (
-                          <div key={ssq.id} className="flex items-center gap-2 bg-stone-50/50 p-2 rounded-lg border border-stone-100">
-                            <span className="text-[10px] font-bold text-emerald-500">{ssqIndex + 1}-</span>
-                            <textarea 
-                              value={ssq.text} 
-                              onChange={(e) => {
-                                updateQuestion(ssq.id, { text: e.target.value }, q.id, sq.id);
-                                e.target.style.height = 'auto';
-                                e.target.style.height = e.target.scrollHeight + 'px';
-                              }}
-                              placeholder="نص النقطة..."
-                              rows={1}
-                              className="flex-1 bg-transparent text-[11px] outline-none resize-none overflow-hidden"
-                            />
-                            <div className="flex items-center gap-1">
-                              <ImageUpload 
-                                label="صورة السؤال" 
-                                value={ssq.questionImage} 
-                                onChange={(base64) => updateQuestion(ssq.id, { questionImage: base64 }, q.id, sq.id)}
-                                onRemove={() => updateQuestion(ssq.id, { questionImage: undefined }, q.id, sq.id)}
-                                compact
-                              />
-                              <ImageUpload 
-                                label="صورة الجواب" 
-                                value={ssq.answerImage} 
-                                onChange={(base64) => updateQuestion(ssq.id, { answerImage: base64 }, q.id, sq.id)}
-                                onRemove={() => updateQuestion(ssq.id, { answerImage: undefined }, q.id, sq.id)}
-                                compact
+                          <div key={ssq.id} className="flex flex-col sm:flex-row sm:items-center gap-3 bg-stone-50/50 p-2 rounded-lg border border-stone-100">
+                            <div className="flex items-center gap-2 flex-1">
+                              <span className="text-[10px] font-bold text-emerald-500 shrink-0">{ssqIndex + 1}-</span>
+                              <textarea 
+                                value={ssq.text} 
+                                onChange={(e) => {
+                                  updateQuestion(ssq.id, { text: e.target.value }, q.id, sq.id);
+                                  e.target.style.height = 'auto';
+                                  e.target.style.height = e.target.scrollHeight + 'px';
+                                }}
+                                placeholder="نص النقطة..."
+                                rows={1}
+                                className="flex-1 bg-transparent text-[11px] outline-none resize-none overflow-hidden"
                               />
                             </div>
-                            <input 
-                              type="text" 
-                              value={ssq.answer} 
-                              onChange={(e) => updateQuestion(ssq.id, { answer: e.target.value }, q.id, sq.id)}
-                              placeholder="الجواب"
-                              className="w-20 bg-white px-2 py-0.5 rounded border border-stone-200 text-[10px] outline-none"
-                            />
-                            <input 
-                              type="number" 
-                              value={ssq.grade || ''} 
-                              onChange={(e) => updateQuestion(ssq.id, { grade: Number(e.target.value) }, q.id, sq.id)}
-                              placeholder="درجة"
-                              className="w-10 px-1 py-0.5 rounded border border-stone-200 text-[10px] text-center"
-                            />
-                            <button 
-                              onClick={() => removeQuestion(ssq.id, q.id, sq.id)}
-                              className="text-stone-300 hover:text-red-500"
-                            >
-                              <Trash2 className="w-2.5 h-2.5" />
-                            </button>
+                            <div className="flex items-center justify-between w-full sm:w-auto gap-3">
+                              <div className="flex items-center gap-1">
+                                <ImageUpload 
+                                  label="صورة السؤال" 
+                                  value={ssq.questionImage} 
+                                  onChange={(base64) => updateQuestion(ssq.id, { questionImage: base64 }, q.id, sq.id)}
+                                  onRemove={() => updateQuestion(ssq.id, { questionImage: undefined }, q.id, sq.id)}
+                                  compact
+                                />
+                                <ImageUpload 
+                                  label="صورة الجواب" 
+                                  value={ssq.answerImage} 
+                                  onChange={(base64) => updateQuestion(ssq.id, { answerImage: base64 }, q.id, sq.id)}
+                                  onRemove={() => updateQuestion(ssq.id, { answerImage: undefined }, q.id, sq.id)}
+                                  compact
+                                />
+                              </div>
+                              <input 
+                                type="text" 
+                                value={ssq.answer} 
+                                onChange={(e) => updateQuestion(ssq.id, { answer: e.target.value }, q.id, sq.id)}
+                                placeholder="الجواب"
+                                className="w-24 bg-white px-2 py-0.5 rounded border border-stone-200 text-[10px] outline-none"
+                              />
+                              <input 
+                                type="number" 
+                                value={ssq.grade || ''} 
+                                onChange={(e) => updateQuestion(ssq.id, { grade: Number(e.target.value) }, q.id, sq.id)}
+                                placeholder="درجة"
+                                className="w-10 px-1 py-0.5 rounded border border-stone-200 text-[10px] text-center"
+                              />
+                              <button 
+                                onClick={() => removeQuestion(ssq.id, q.id, sq.id)}
+                                className="text-stone-400 sm:text-stone-300 hover:text-red-500"
+                              >
+                                <Trash2 className="w-4 h-4 sm:w-2.5 sm:h-2.5" />
+                              </button>
+                            </div>
                           </div>
                         ))}
                         <button 
