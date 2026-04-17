@@ -5,7 +5,8 @@ import {
   XCircle, ChevronDown, ChevronUp, Download, LogIn, 
   LogOut, Loader2, FileUp, List, Settings, User,
   HelpCircle, CheckSquare, Type, LayoutGrid, Image as ImageIcon,
-  ArrowRight, Calendar, Folder, FolderOpen, Users, Camera
+  ArrowRight, Calendar, Folder, FolderOpen, Users, Camera,
+  Phone, MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -27,6 +28,32 @@ import { twMerge } from 'tailwind-merge';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+function ContactButtons() {
+  return (
+    <div className="bg-white/50 backdrop-blur-sm p-4 rounded-2xl border border-white/50 space-y-3 mt-8 max-w-sm w-full">
+      <p className="text-stone-500 text-sm font-bold text-center mb-2">للتواصل مع الإدارة والتفعيل:</p>
+      <div className="grid grid-cols-1 gap-2">
+        <a 
+          href="tel:07706118992" 
+          className="flex items-center justify-center gap-2 text-stone-700 bg-white border border-stone-200 py-2.5 rounded-xl font-bold hover:bg-stone-50 transition-all shadow-sm"
+        >
+          <Phone className="w-4 h-4 text-emerald-600" />
+          <span dir="ltr">07706118992</span>
+        </a>
+        <a 
+          href="https://wa.me/9647706118992" 
+          target="_blank" 
+          rel="noreferrer"
+          className="bg-[#25D366] text-white py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all shadow-sm"
+        >
+          <MessageCircle className="w-4 h-4" />
+          تواصل عبر واتساب
+        </a>
+      </div>
+    </div>
+  );
 }
 
 class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean, error: any }> {
@@ -566,6 +593,8 @@ function App() {
             <LogIn className="w-5 h-5" />
             تسجيل الدخول باستخدام جوجل
           </button>
+          
+          <ContactButtons />
         </motion.div>
       </div>
     );
@@ -638,6 +667,9 @@ function App() {
           <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-stone-900 mb-2">تم رفض الطلب</h2>
           <p className="text-stone-500 mb-6">عذراً، تم رفض طلب انضمامك للمشروع. يرجى التواصل مع الإدارة للمزيد من التفاصيل.</p>
+          <div className="mb-6">
+            <ContactButtons />
+          </div>
           <button onClick={logout} className="w-full bg-stone-900 text-white py-3 rounded-xl font-medium">
             تسجيل الخروج
           </button>
@@ -1096,6 +1128,23 @@ function Dashboard({ exams, onNewExam, onGrade, onEditExam, onDeleteExam }: any)
           <Plus className="w-5 h-5" />
           امتحان جديد
         </button>
+      </div>
+
+      <div className="bg-stone-50 border border-stone-200 p-6 rounded-3xl flex flex-col md:flex-row items-center gap-6 justify-between">
+        <div className="space-y-1 text-center md:text-right">
+          <h3 className="font-bold text-stone-800">هل تحتاج مساعدة في التفعيل؟</h3>
+          <p className="text-sm text-stone-500">تواصل معنا لتفعيل حسابك أو لطلب الدعم الفني</p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+          <a href="tel:07706118992" className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-white border border-stone-200 px-6 py-3 rounded-xl font-bold hover:bg-stone-100 transition-all shadow-sm">
+            <Phone className="w-4 h-4 text-emerald-600" />
+            <span dir="ltr">07706118992</span>
+          </a>
+          <a href="https://wa.me/9647706118992" target="_blank" rel="noreferrer" className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-[#25D366] text-white px-6 py-3 rounded-xl font-bold hover:opacity-90 transition-all shadow-sm">
+            <MessageCircle className="w-4 h-4" />
+            واتساب الدعم
+          </a>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
