@@ -30,25 +30,25 @@ function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-function ContactButtons() {
+function ContactButtons({ className }: { className?: string }) {
   return (
-    <div className="bg-white/50 backdrop-blur-sm p-4 rounded-2xl border border-white/50 space-y-3 mt-8 max-w-sm w-full">
+    <div className={cn("bg-white/50 backdrop-blur-sm p-4 rounded-2xl border border-white/50 space-y-3 mt-8 max-w-sm w-full", className)}>
       <p className="text-stone-500 text-sm font-bold text-center mb-2">للتواصل مع الإدارة والتفعيل:</p>
       <div className="grid grid-cols-1 gap-2">
         <a 
           href="tel:07706118992" 
-          className="flex items-center justify-center gap-2 text-stone-700 bg-white border border-stone-200 py-2.5 rounded-xl font-bold hover:bg-stone-50 transition-all shadow-sm"
+          className="flex items-center justify-center gap-2 text-stone-700 bg-white border border-stone-200 py-2.5 rounded-xl font-bold hover:bg-stone-50 transition-all shadow-sm group"
         >
-          <Phone className="w-4 h-4 text-emerald-600" />
+          <Phone className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
           <span dir="ltr">07706118992</span>
         </a>
         <a 
           href="https://wa.me/9647706118992" 
           target="_blank" 
           rel="noreferrer"
-          className="bg-[#25D366] text-white py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all shadow-sm"
+          className="bg-[#25D366] text-white py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all shadow-sm group"
         >
-          <MessageCircle className="w-4 h-4" />
+          <MessageCircle className="w-4 h-4 group-hover:scale-110 transition-transform" />
           تواصل عبر واتساب
         </a>
       </div>
@@ -697,6 +697,17 @@ function App() {
               {userProfile?.role === 'admin' && (
                 <NavButton active={view === 'admin'} onClick={() => setView('admin')} icon={<Users className="w-4 h-4" />} label="الإدارة" />
               )}
+              <div className="h-4 w-px bg-stone-200 mx-2 hidden xl:block" />
+              <div className="hidden xl:flex items-center gap-4">
+                <a href="tel:07706118992" className="flex items-center gap-1.5 text-[10px] font-black text-stone-400 uppercase tracking-tighter hover:text-emerald-600 transition-colors">
+                  <Phone className="w-3 h-3" />
+                  اتصال
+                </a>
+                <a href="https://wa.me/9647706118992" target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-[10px] font-black text-stone-400 uppercase tracking-tighter hover:text-[#25D366] transition-colors">
+                  <MessageCircle className="w-3 h-3" />
+                  واتساب
+                </a>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -1607,45 +1618,48 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
           <button onClick={onCancel} className="px-6 py-2 rounded-xl text-stone-500 hover:bg-stone-100 transition-colors">إلغاء</button>
           
           {questions.length > 0 && (
-            <div className="relative">
-              <button 
-                onClick={() => setShowPrintMenu(!showPrintMenu)}
-                disabled={isPrinting}
-                className="px-6 py-2 rounded-xl bg-stone-900 text-white flex items-center gap-2 hover:bg-stone-800 disabled:opacity-50"
-              >
-                {isPrinting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                تحميل نسخة الأسئلة (PDF)
-                <ChevronDown className={cn("w-4 h-4 transition-transform", showPrintMenu && "rotate-180")} />
-              </button>
-              <AnimatePresence>
-                {showPrintMenu && (
-                  <motion.div 
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: 10 }}
-                    className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-stone-100 py-2 z-50"
-                  >
-                    <button 
-                      onClick={() => {
-                        printExam('questions');
-                        setShowPrintMenu(false);
-                      }}
-                      className="w-full text-right px-4 py-2 text-sm hover:bg-stone-50 text-stone-700"
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] text-stone-400 font-bold mb-1 hidden md:block">جاهز للطباعة؟</span>
+              <div className="relative">
+                <button 
+                  onClick={() => setShowPrintMenu(!showPrintMenu)}
+                  disabled={isPrinting}
+                  className="px-6 py-2 rounded-xl bg-stone-900 text-white flex items-center gap-2 hover:bg-stone-800 disabled:opacity-50 text-sm md:text-base"
+                >
+                  {isPrinting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  تحميل النماذج للطباعة (PDF)
+                  <ChevronDown className={cn("w-4 h-4 transition-transform", showPrintMenu && "rotate-180")} />
+                </button>
+                <AnimatePresence>
+                  {showPrintMenu && (
+                    <motion.div 
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 10 }}
+                      className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-stone-100 py-2 z-50"
                     >
-                      تحميل الأسئلة فقط
-                    </button>
-                    <button 
-                      onClick={() => {
-                        printExam('both');
-                        setShowPrintMenu(false);
-                      }}
-                      className="w-full text-right px-4 py-2 text-sm hover:bg-stone-50 text-stone-700 border-t border-stone-50"
-                    >
-                      تحميل الأسئلة والأجوبة
-                    </button>
-                  </motion.div>
-                )}
-              </AnimatePresence>
+                      <button 
+                        onClick={() => {
+                          printExam('questions');
+                          setShowPrintMenu(false);
+                        }}
+                        className="w-full text-right px-4 py-2 text-sm hover:bg-stone-50 text-stone-700"
+                      >
+                        تحميل الأسئلة فقط
+                      </button>
+                      <button 
+                        onClick={() => {
+                          printExam('both');
+                          setShowPrintMenu(false);
+                        }}
+                        className="w-full text-right px-4 py-2 text-sm hover:bg-stone-50 text-stone-700 border-t border-stone-50"
+                      >
+                        تحميل الأسئلة والأجوبة
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
           )}
 
@@ -2542,7 +2556,7 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
                 </span>
               </div>
               
-              <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+              <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto mt-4 md:mt-0 pb-4 md:pb-0">
                 <button 
                   onClick={async () => {
                     const element = document.getElementById(`current-grading-result`);
@@ -2550,23 +2564,25 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
                       await generatePDFFromElement(element, `${currentGrading.studentName}_نتيجة.pdf`, { padding: '20mm', ignoreImages: true });
                     }
                   }}
-                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center justify-center gap-2 transition-all"
+                  className="flex-1 sm:flex-none px-4 py-3 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center justify-center gap-2 transition-all font-bold"
                 >
                   <Download className="w-4 h-4" />
                   تحميل النتيجة (PDF)
                 </button>
-                <button 
-                  onClick={() => setGradingResults([])} 
-                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-stone-500 hover:bg-stone-100 transition-colors text-sm font-medium"
-                >
-                  إعادة التصحيح
-                </button>
-                <button 
-                  onClick={() => setShowSaveModal(true)} 
-                  className="flex-1 sm:flex-none px-8 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all"
-                >
-                  حفظ جميع النتائج
-                </button>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setGradingResults([])} 
+                    className="flex-1 px-4 py-3 rounded-xl text-stone-500 hover:bg-stone-100 transition-colors text-sm font-medium border border-transparent"
+                  >
+                    إلغاء
+                  </button>
+                  <button 
+                    onClick={() => setShowSaveModal(true)} 
+                    className="flex-[2] px-8 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-center"
+                  >
+                    حفظ جميع النتائج
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -2787,33 +2803,33 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
         animate={{ opacity: 1, x: 0 }}
         className="space-y-8"
       >
-        <div className="flex items-center justify-between" data-html2canvas-ignore>
-          <button onClick={() => setSelectedResult(null)} className="flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4" data-html2canvas-ignore>
+          <button onClick={() => setSelectedResult(null)} className="flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors w-fit">
             <ArrowRight className="w-5 h-5" />
             العودة لقائمة الطلاب
           </button>
           <button 
             onClick={() => exportPDF(selectedResult)}
             disabled={isExporting}
-            className="bg-emerald-600 text-white px-6 py-2 rounded-xl flex items-center gap-2 hover:bg-emerald-700 transition-colors disabled:opacity-50"
+            className="w-full sm:w-auto bg-emerald-600 text-white px-6 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors disabled:opacity-50 shadow-sm"
           >
             {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
             تحميل تقرير النتيجة (PDF)
           </button>
         </div>
 
-        <div ref={resultPrintRef} id={`print-result-${selectedResult.id}`} className="bg-white p-8 border space-y-8 pdf-export-container">
-          <div className="flex items-center justify-between border-b border-stone-100 pb-6">
-            <div>
-              <h3 className="text-2xl font-bold">الطالب: {selectedResult.studentName}</h3>
-              <p className="text-stone-500 mt-1">امتحان: {selectedResult.examTitle}</p>
-              <p className="text-stone-400 text-sm mt-1">التاريخ: {selectedResult.createdAt?.toDate().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        <div ref={resultPrintRef} id={`print-result-${selectedResult.id}`} className="bg-white p-4 md:p-8 border shadow-sm rounded-3xl space-y-8 pdf-export-container">
+          <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-stone-100 pb-6 gap-6">
+            <div className="text-right md:text-right">
+              <h3 className="text-xl md:text-2xl font-bold">الطالب: {selectedResult.studentName}</h3>
+              <p className="text-stone-500 mt-1 text-sm md:text-base">امتحان: {selectedResult.examTitle}</p>
+              <p className="text-stone-400 text-xs md:text-sm mt-1">التاريخ: {selectedResult.createdAt?.toDate().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
             </div>
-            <div className="text-right">
-              <span className="text-stone-400 text-sm">الدرجة النهائية</span>
-              <div className="text-5xl font-bold text-emerald-600">
+            <div className="text-right md:text-left flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center bg-stone-50 md:bg-transparent p-4 md:p-0 rounded-2xl">
+              <span className="text-stone-400 text-xs font-bold md:text-sm">الدرجة النهائية</span>
+              <div className="text-3xl md:text-5xl font-bold text-emerald-600">
                 {selectedResult.totalGrade}
-                <span className="text-xl text-stone-300"> / {exam?.totalGrade || '?'}</span>
+                <span className="text-lg md:text-xl text-stone-300"> / {exam?.totalGrade || '?'}</span>
               </div>
             </div>
           </div>
@@ -2839,24 +2855,24 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
         animate={{ opacity: 1, x: 0 }}
         className="space-y-8"
       >
-        <div className="flex items-center justify-between">
-          <button onClick={() => setSelectedSession(null)} className="flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <button onClick={() => setSelectedSession(null)} className="flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors w-fit">
             <ArrowRight className="w-5 h-5" />
             العودة لقائمة المجموعات
           </button>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+            <div className="text-right order-2 sm:order-1">
+              <h3 className="text-lg md:text-xl font-bold">{selectedSession.sessionName || selectedSession.examTitle}</h3>
+              <p className="text-stone-400 text-xs md:text-sm">{selectedSession.createdAt?.toDate().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            </div>
             <button 
               onClick={exportAllPDF}
               disabled={isExportingAll}
-              className="bg-emerald-600 text-white px-6 py-2 rounded-xl flex items-center gap-2 hover:bg-emerald-700 transition-colors disabled:opacity-50"
+              className="bg-emerald-600 text-white px-6 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors disabled:opacity-50 shadow-sm order-1 sm:order-2"
             >
               {isExportingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
               تحميل كل النتائج (PDF واحد)
             </button>
-            <div className="text-right">
-              <h3 className="text-xl font-bold">{selectedSession.sessionName || selectedSession.examTitle}</h3>
-              <p className="text-stone-400 text-sm">{selectedSession.createdAt?.toDate().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-            </div>
           </div>
         </div>
 
@@ -2921,7 +2937,31 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
         </div>
 
         <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
-          <table className="w-full text-right">
+          <div className="md:hidden divide-y divide-stone-100">
+            {sessionResults.map((res: any) => (
+              <div 
+                key={res.id} 
+                onClick={() => setSelectedResult(res)}
+                className="p-5 active:bg-stone-50 transition-colors flex items-center justify-between group"
+              >
+                <div className="space-y-1">
+                  <p className="font-bold text-stone-900">{res.studentName}</p>
+                  <p className="text-xs text-stone-400 font-medium">الدرجة: {res.totalGrade}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm">
+                    {res.totalGrade}
+                  </span>
+                  <ArrowRight className="w-5 h-5 text-stone-300 rotate-180" />
+                </div>
+              </div>
+            ))}
+            {sessionResults.length === 0 && (
+              <div className="p-10 text-center text-stone-400 italic">لا توجد نتائج في هذه المجموعة</div>
+            )}
+          </div>
+
+          <table className="hidden md:table w-full text-right">
             <thead>
               <tr className="bg-stone-50 border-b border-stone-200">
                 <th className="px-6 py-4 font-bold text-stone-500 text-sm text-right">اسم الطالب</th>
@@ -2957,6 +2997,11 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
                   </td>
                 </tr>
               ))}
+              {sessionResults.length === 0 && (
+                <tr>
+                  <td colSpan={3} className="px-6 py-10 text-center text-stone-400 italic">لا توجد نتائج في هذه المجموعة</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
