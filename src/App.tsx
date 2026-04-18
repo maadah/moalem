@@ -2519,27 +2519,30 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
               ))}
             </div>
 
-            <div className="flex justify-between items-center pt-6 border-t border-stone-100">
-              <div className="flex gap-2">
-                <button 
-                  disabled={currentResultIndex === 0}
-                  onClick={() => setCurrentResultIndex(currentResultIndex - 1)}
-                  className="px-4 py-2 rounded-xl border border-stone-200 disabled:opacity-30"
-                >
-                  السابق
-                </button>
-                <button 
-                  disabled={currentResultIndex === gradingResults.length - 1}
-                  onClick={() => setCurrentResultIndex(currentResultIndex + 1)}
-                  className="px-4 py-2 rounded-xl border border-stone-200 disabled:opacity-30"
-                >
-                  التالي
-                </button>
-                <span className="flex items-center px-4 text-stone-400 text-sm">
+            <div className="flex flex-col md:flex-row justify-between items-center gap-6 pt-6 border-t border-stone-100">
+              <div className="flex flex-wrap items-center justify-center gap-3 w-full md:w-auto">
+                <div className="flex gap-2">
+                  <button 
+                    disabled={currentResultIndex === 0}
+                    onClick={() => setCurrentResultIndex(currentResultIndex - 1)}
+                    className="px-4 py-2 rounded-xl border border-stone-200 disabled:opacity-30 hover:bg-stone-50 transition-colors"
+                  >
+                    السابق
+                  </button>
+                  <button 
+                    disabled={currentResultIndex === gradingResults.length - 1}
+                    onClick={() => setCurrentResultIndex(currentResultIndex + 1)}
+                    className="px-4 py-2 rounded-xl border border-stone-200 disabled:opacity-30 hover:bg-stone-50 transition-colors"
+                  >
+                    التالي
+                  </button>
+                </div>
+                <span className="text-stone-400 text-sm font-medium bg-stone-50 px-3 py-1.5 rounded-lg">
                   طالب {currentResultIndex + 1} من {gradingResults.length}
                 </span>
               </div>
-              <div className="flex gap-4">
+              
+              <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
                 <button 
                   onClick={async () => {
                     const element = document.getElementById(`current-grading-result`);
@@ -2547,13 +2550,23 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
                       await generatePDFFromElement(element, `${currentGrading.studentName}_نتيجة.pdf`, { padding: '20mm', ignoreImages: true });
                     }
                   }}
-                  className="px-4 py-2 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center gap-2"
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center justify-center gap-2 transition-all"
                 >
                   <Download className="w-4 h-4" />
                   تحميل النتيجة (PDF)
                 </button>
-                <button onClick={() => setGradingResults([])} className="px-6 py-2 rounded-xl text-stone-500 hover:bg-stone-100 transition-colors">إعادة التصحيح</button>
-                <button onClick={() => setShowSaveModal(true)} className="px-8 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-600/20">حفظ جميع النتائج</button>
+                <button 
+                  onClick={() => setGradingResults([])} 
+                  className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl text-stone-500 hover:bg-stone-100 transition-colors text-sm font-medium"
+                >
+                  إعادة التصحيح
+                </button>
+                <button 
+                  onClick={() => setShowSaveModal(true)} 
+                  className="flex-1 sm:flex-none px-8 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all"
+                >
+                  حفظ جميع النتائج
+                </button>
               </div>
             </div>
           </div>
