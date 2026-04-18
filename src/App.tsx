@@ -348,8 +348,8 @@ function GradingResultItem({ question, gradings, onGradeChange, level = 1 }: any
 
   return (
     <div className={cn(
-      "p-6 rounded-2xl border space-y-3 transition-all",
-      level === 1 ? "bg-stone-50 border-stone-100 shadow-sm" : "bg-white border-stone-50 mr-6"
+      "p-4 md:p-6 rounded-2xl border space-y-3 transition-all",
+      level === 1 ? "bg-stone-50 border-stone-100 shadow-sm" : "bg-white border-stone-50 mr-2 md:mr-6"
     )}>
       <div className="flex items-center justify-between">
         <div className="flex flex-col gap-2 flex-1">
@@ -2803,9 +2803,9 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
         animate={{ opacity: 1, x: 0 }}
         className="space-y-8"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4" data-html2canvas-ignore>
-          <button onClick={() => setSelectedResult(null)} className="flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors w-fit">
-            <ArrowRight className="w-5 h-5" />
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2 md:px-0" data-html2canvas-ignore>
+          <button onClick={() => setSelectedResult(null)} className="flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors w-fit font-bold">
+            <ArrowRight className="w-5 h-5 transition-transform group-hover:-translate-x-1" />
             العودة لقائمة الطلاب
           </button>
           <button 
@@ -2820,12 +2820,14 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
 
         <div ref={resultPrintRef} id={`print-result-${selectedResult.id}`} className="bg-white p-4 md:p-8 border shadow-sm rounded-3xl space-y-8 pdf-export-container">
           <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-stone-100 pb-6 gap-6">
-            <div className="text-right md:text-right">
-              <h3 className="text-xl md:text-2xl font-bold">الطالب: {selectedResult.studentName}</h3>
-              <p className="text-stone-500 mt-1 text-sm md:text-base">امتحان: {selectedResult.examTitle}</p>
-              <p className="text-stone-400 text-xs md:text-sm mt-1">التاريخ: {selectedResult.createdAt?.toDate().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            <div className="text-right">
+              <h3 className="text-xl md:text-2xl font-bold text-stone-900 break-words">{selectedResult.studentName || 'اسم غير معروف'}</h3>
+              <p className="text-stone-500 mt-1 text-sm md:text-base">{selectedResult.examTitle || 'امتحان غير محدد'}</p>
+              {selectedResult.createdAt && (
+                <p className="text-stone-400 text-[10px] md:text-sm mt-1">التاريخ: {selectedResult.createdAt.toDate().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              )}
             </div>
-            <div className="text-right md:text-left flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center bg-stone-50 md:bg-transparent p-4 md:p-0 rounded-2xl">
+            <div className="text-right md:text-left flex flex-row md:flex-col items-center md:items-end justify-between md:justify-center bg-stone-50 md:bg-transparent p-4 md:p-0 rounded-2xl border border-stone-100 md:border-0">
               <span className="text-stone-400 text-xs font-bold md:text-sm">الدرجة النهائية</span>
               <div className="text-3xl md:text-5xl font-bold text-emerald-600">
                 {selectedResult.totalGrade}
@@ -2938,18 +2940,18 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
 
         <div className="bg-white rounded-3xl border border-stone-200 shadow-sm overflow-hidden">
           <div className="md:hidden divide-y divide-stone-100">
-            {sessionResults.map((res: any) => (
+            {sessionResults.length > 0 ? sessionResults.map((res: any) => (
               <div 
                 key={res.id} 
                 className="p-5 active:bg-stone-50 transition-colors space-y-4"
               >
                 <div className="flex items-center justify-between">
                   <div className="space-y-1">
-                    <p className="font-bold text-stone-900 break-words max-w-[200px]">{res.studentName}</p>
+                    <p className="font-bold text-stone-900 break-all max-w-[200px]">{res.studentName || 'بدون اسم'}</p>
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">الدرجة النهائية:</span>
                       <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
-                        {res.totalGrade}
+                        {res.totalGrade ?? 0}
                       </span>
                     </div>
                   </div>
@@ -2962,15 +2964,22 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
                 </div>
                 <button 
                   onClick={() => setSelectedResult(res)}
-                  className="w-full py-3 rounded-xl bg-stone-900 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-95"
+                  className="w-full py-3.5 rounded-xl bg-stone-900 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md shadow-stone-900/10"
                 >
                   عرض تفاصيل النتيجة
                   <ArrowRight className="w-4 h-4 rotate-180" />
                 </button>
               </div>
-            ))}
-            {sessionResults.length === 0 && (
-              <div className="p-10 text-center text-stone-400 italic">لا توجد نتائج في هذه المجموعة</div>
+            )) : (
+              <div className="p-16 text-center space-y-4">
+                <div className="w-16 h-16 bg-stone-50 rounded-full flex items-center justify-center mx-auto">
+                  <FileText className="w-8 h-8 text-stone-300" />
+                </div>
+                <div>
+                  <p className="text-stone-900 font-bold">لا توجد نتائج</p>
+                  <p className="text-stone-400 text-sm">لم يتم العثور على نتائج مسجلة لهذه المجموعة.</p>
+                </div>
+              </div>
             )}
           </div>
 
@@ -3093,13 +3102,14 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
                 <Users className="w-3.5 h-3.5" /> 
                 {session.studentCount === 1 ? 'طالب واحد' : 
                  session.studentCount === 2 ? 'طالبان' : 
-                 `${session.studentCount} طلاب`}
+                 session.studentCount <= 10 ? `${session.studentCount} طلاب` :
+                 `${session.studentCount} طالب`}
               </span>
               <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {session.createdAt?.toDate().toLocaleDateString('ar-EG')}</span>
             </div>
-            <div className="mt-6 flex items-center justify-between text-xs font-bold text-emerald-600">
-              <span>فتح المجموعة</span>
-              <ArrowRight className="w-4 h-4 rotate-180" />
+            <div className="mt-6 pt-4 border-t border-stone-50 flex items-center justify-between text-xs font-bold text-emerald-600 transition-all group-hover:bg-emerald-50/50 rounded-xl px-2">
+              <span className="flex items-center gap-2">عرض تفاصيل المجموعة</span>
+              <ArrowRight className="w-4 h-4 rotate-180 transition-transform group-hover:translate-x-1" />
             </div>
           </div>
         ))}
