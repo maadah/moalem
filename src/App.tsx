@@ -2855,23 +2855,23 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
         animate={{ opacity: 1, x: 0 }}
         className="space-y-8"
       >
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <button onClick={() => setSelectedSession(null)} className="flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors w-fit">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 px-2">
+          <button onClick={() => setSelectedSession(null)} className="flex items-center gap-2 text-stone-500 hover:text-stone-900 transition-colors w-fit font-bold text-sm">
             <ArrowRight className="w-5 h-5" />
-            العودة لقائمة المجموعات
+            العودة للقائمة الرئيسية
           </button>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-            <div className="text-right order-2 sm:order-1">
-              <h3 className="text-lg md:text-xl font-bold">{selectedSession.sessionName || selectedSession.examTitle}</h3>
-              <p className="text-stone-400 text-xs md:text-sm">{selectedSession.createdAt?.toDate().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+          <div className="flex flex-col sm:flex-row items-center gap-4 bg-white p-4 rounded-2xl border border-stone-100 shadow-sm">
+            <div className="text-right sm:ml-6 ml-0 mb-4 sm:mb-0">
+              <h3 className="text-lg font-bold text-stone-900">{selectedSession.sessionName || selectedSession.examTitle}</h3>
+              <p className="text-stone-400 text-xs">{selectedSession.createdAt?.toDate().toLocaleDateString('ar-EG', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
             </div>
             <button 
               onClick={exportAllPDF}
               disabled={isExportingAll}
-              className="bg-emerald-600 text-white px-6 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors disabled:opacity-50 shadow-sm order-1 sm:order-2"
+              className="w-full sm:w-auto bg-emerald-600 text-white px-6 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors disabled:opacity-50 shadow-lg shadow-emerald-600/20 font-bold"
             >
               {isExportingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              تحميل كل النتائج (PDF واحد)
+              تحميل كل النتائج (PDF)
             </button>
           </div>
         </div>
@@ -2941,19 +2941,32 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
             {sessionResults.map((res: any) => (
               <div 
                 key={res.id} 
-                onClick={() => setSelectedResult(res)}
-                className="p-5 active:bg-stone-50 transition-colors flex items-center justify-between group"
+                className="p-5 active:bg-stone-50 transition-colors space-y-4"
               >
-                <div className="space-y-1">
-                  <p className="font-bold text-stone-900">{res.studentName}</p>
-                  <p className="text-xs text-stone-400 font-medium">الدرجة: {res.totalGrade}</p>
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <p className="font-bold text-stone-900 break-words max-w-[200px]">{res.studentName}</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-stone-400 font-bold uppercase tracking-wider">الدرجة النهائية:</span>
+                      <span className="text-xs font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md">
+                        {res.totalGrade}
+                      </span>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => exportPDF(res)}
+                    className="p-3 bg-stone-50 text-stone-400 rounded-xl hover:text-emerald-600 transition-colors"
+                  >
+                    <Download className="w-5 h-5" />
+                  </button>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold text-sm">
-                    {res.totalGrade}
-                  </span>
-                  <ArrowRight className="w-5 h-5 text-stone-300 rotate-180" />
-                </div>
+                <button 
+                  onClick={() => setSelectedResult(res)}
+                  className="w-full py-3 rounded-xl bg-stone-900 text-white font-bold text-sm flex items-center justify-center gap-2 transition-all active:scale-95"
+                >
+                  عرض تفاصيل النتيجة
+                  <ArrowRight className="w-4 h-4 rotate-180" />
+                </button>
               </div>
             ))}
             {sessionResults.length === 0 && (
@@ -2972,23 +2985,23 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
             <tbody className="divide-y divide-stone-100">
               {sessionResults.map((res: any) => (
                 <tr key={res.id} className="hover:bg-stone-50 transition-colors group">
-                  <td className="px-6 py-4 font-bold">{res.studentName}</td>
-                  <td className="px-6 py-4">
-                    <span className="px-3 py-1 bg-emerald-50 text-emerald-700 rounded-full font-bold text-sm">
+                  <td className="px-6 py-5 font-bold text-stone-900">{res.studentName}</td>
+                  <td className="px-6 py-5">
+                    <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-xl font-black text-sm border border-emerald-100/50">
                       {res.totalGrade}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-left">
-                    <div className="flex items-center justify-end gap-2">
+                  <td className="px-6 py-5 text-left">
+                    <div className="flex items-center justify-end gap-3">
                       <button 
                         onClick={() => setSelectedResult(res)}
-                        className="px-4 py-1.5 rounded-lg bg-stone-100 text-stone-600 text-xs font-bold hover:bg-emerald-600 hover:text-white transition-all"
+                        className="px-5 py-2 rounded-xl bg-stone-900 text-white text-xs font-bold hover:bg-emerald-600 transition-all shadow-sm active:scale-95"
                       >
                         عرض التفاصيل
                       </button>
                       <button 
                         onClick={() => exportPDF(res)}
-                        className="p-2 text-stone-300 hover:text-emerald-600 transition-colors"
+                        className="p-2.5 bg-stone-50 text-stone-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"
                         title="تحميل النتيجة PDF"
                       >
                         <Download className="w-5 h-5" />
@@ -3076,7 +3089,12 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
             </div>
             <h3 className="text-lg font-bold mb-2 group-hover:text-emerald-600 transition-colors">{session.sessionName || session.examTitle}</h3>
             <div className="flex items-center gap-4 text-xs text-stone-500">
-              <span className="flex items-center gap-1"><Users className="w-3.5 h-3.5" /> {session.studentCount} طلاب</span>
+              <span className="flex items-center gap-1">
+                <Users className="w-3.5 h-3.5" /> 
+                {session.studentCount === 1 ? 'طالب واحد' : 
+                 session.studentCount === 2 ? 'طالبان' : 
+                 `${session.studentCount} طلاب`}
+              </span>
               <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" /> {session.createdAt?.toDate().toLocaleDateString('ar-EG')}</span>
             </div>
             <div className="mt-6 flex items-center justify-between text-xs font-bold text-emerald-600">
