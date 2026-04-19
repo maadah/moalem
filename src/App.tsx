@@ -5,7 +5,7 @@ import {
   XCircle, ChevronDown, ChevronUp, Download, LogIn, 
   LogOut, Loader2, FileUp, List, Settings, User,
   HelpCircle, CheckSquare, Type, LayoutGrid, Image as ImageIcon,
-  ArrowRight, Calendar, Folder, FolderOpen, Users, Camera,
+  ArrowRight, Calendar, Folder, FolderOpen, Users, Camera, Layers,
   Phone, MessageCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -2276,9 +2276,98 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
   );
 }
 
+function VisualPaperOverlay({ imageUrl, gradings, studentName, totalGrade, maxGrade, isFirstPage }: any) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
+
+  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
+    const { naturalWidth, naturalHeight } = e.currentTarget;
+    setDimensions({ width: naturalWidth, height: naturalHeight });
+  };
+
+  return (
+    <div ref={containerRef} className="relative w-full rounded-2xl overflow-hidden shadow-sm border border-stone-200 bg-stone-100">
+      <img 
+        src={imageUrl} 
+        alt="" 
+        className="w-full h-auto block" 
+        onLoad={handleImageLoad}
+        crossOrigin="anonymous"
+      />
+      {dimensions.width > 0 && (
+        <svg 
+          viewBox="0 0 1000 1000" 
+          preserveAspectRatio="none"
+          className="absolute inset-0 w-full h-full pointer-events-none"
+        >
+          {/* Marks for each grading */}
+          {gradings.map((g: any, i: number) => {
+            if (!g.box) return null;
+            const [ymin, xmin, ymax, xmax] = g.box;
+            const isCorrect = g.grade > 0;
+            const isFull = g.grade >= (g.maxGrade || 0);
+
+            return (
+              <g key={i}>
+                {/* The Mark (Check or Cross) */}
+                <text 
+                  x={xmax > 900 ? xmin - 10 : xmax + 10} 
+                  y={(ymin + ymax) / 2} 
+                  fontSize="48" 
+                  fill={isCorrect ? "#059669" : "#dc2626"}
+                  className="font-bold select-none drop-shadow-sm"
+                  textAnchor={xmax > 900 ? "end" : "start"}
+                  dominantBaseline="middle"
+                >
+                  {isCorrect ? "✓" : "×"}
+                </text>
+                {/* The Grade for the question */}
+                <rect 
+                  x={xmax > 900 ? xmin - 50 : xmax + 50} 
+                  y={ymin} 
+                  width="45" 
+                  height="35" 
+                  rx="6"
+                  fill="white"
+                  fillOpacity="0.9"
+                  stroke={isCorrect ? "#059669" : "#dc2626"}
+                  strokeWidth="2"
+                />
+                <text 
+                  x={xmax > 900 ? xmin - 27 : xmax + 72} 
+                  y={ymin + 22} 
+                  fontSize="20" 
+                  fill={isCorrect ? "#059669" : "#dc2626"}
+                  className="font-bold select-none"
+                  textAnchor="middle"
+                >
+                  {g.grade}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* Student Final Grade Overlay (Top Right) */}
+          {isFirstPage && (
+            <g transform="translate(800, 50)">
+              <circle cx="50" cy="50" r="45" fill="white" fillOpacity="0.9" stroke="#059669" strokeWidth="4" />
+              <text x="50" y="45" fontSize="24" fill="#059669" fontWeight="bold" textAnchor="middle">الدرجة</text>
+              <line x1="20" y1="52" x2="80" y2="52" stroke="#059669" strokeWidth="2" />
+              <text x="50" y="78" fontSize="22" fill="#059669" fontWeight="bold" textAnchor="middle">{totalGrade} / {maxGrade}</text>
+              
+              <text x="-150" y="40" fontSize="24" fill="#374151" fontWeight="bold" textAnchor="end" className="italic">{studentName}</text>
+            </g>
+          )}
+        </svg>
+      )}
+    </div>
+  );
+}
+
 function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any) {
   const [images, setImages] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
+  const [gradingMode, setGradingMode] = useState<'digital' | 'paper'>('digital');
   const [isGrading, setIsGrading] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, phase: '' });
   const [gradingResults, setGradingResults] = useState<any[]>([]);
@@ -2469,31 +2558,68 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
             ))}
           </div>
 
-          <div className="flex justify-center gap-4">
-            <button 
-              onClick={() => fileInputRef.current?.click()}
-              className="px-8 py-3 rounded-2xl border border-stone-200 font-medium hover:bg-stone-50 transition-colors flex items-center gap-2"
-            >
-              <Upload className="w-4 h-4" />
-              اختيار الصور
-            </button>
-            <button 
-              onClick={() => cameraInputRef.current?.click()}
-              className="px-8 py-3 rounded-2xl border border-stone-200 font-medium hover:bg-stone-50 transition-colors flex items-center gap-2"
-            >
-              <Camera className="w-4 h-4" />
-              فتح الكاميرا
-            </button>
-            <button 
-              onClick={startGrading}
-              disabled={images.length === 0 || isGrading}
-              className="px-8 py-3 rounded-2xl bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
-            >
-              {isGrading ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
-              {isGrading && progress.total > 0 
-                ? `${progress.phase === 'compressing' ? 'جاري ضغط الصور' : 'جاري التصحيح'} (${progress.current}/${progress.total})...` 
-                : 'بدء التصحيح الذكي'}
-            </button>
+          <div className="flex flex-col items-center gap-4">
+            <div className="flex bg-stone-100 p-1.5 rounded-2xl gap-2 w-full max-w-sm">
+              <button 
+                onClick={() => setGradingMode('digital')}
+                className={cn(
+                  "flex-1 flex flex-col items-center py-3 rounded-xl transition-all gap-1",
+                  gradingMode === 'digital' 
+                    ? "bg-white text-emerald-700 shadow-sm" 
+                    : "text-stone-400 hover:text-stone-600"
+                )}
+              >
+                <div className="flex items-center gap-1.5">
+                  <FileText className="w-4 h-4" />
+                  <span className="font-bold text-sm">تقرير رقمي</span>
+                </div>
+                <span className="text-[10px] opacity-70">عرض النتائج كتقرير وجدول</span>
+              </button>
+              <button 
+                onClick={() => setGradingMode('paper')}
+                className={cn(
+                  "flex-1 flex flex-col items-center py-3 rounded-xl transition-all gap-1",
+                  gradingMode === 'paper' 
+                    ? "bg-white text-emerald-700 shadow-sm" 
+                    : "text-stone-400 hover:text-stone-600"
+                )}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Layers className="w-4 h-4" />
+                  <span className="font-bold text-sm">تصحيح ورقي</span>
+                </div>
+                <span className="text-[10px] opacity-70">وضع العلامات على صورة الورقة</span>
+              </button>
+            </div>
+
+            <div className="flex justify-center gap-4 w-full">
+              <button 
+                onClick={() => fileInputRef.current?.click()}
+                className="flex-1 px-4 sm:px-8 py-3 rounded-2xl border border-stone-200 font-medium hover:bg-stone-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <Upload className="w-4 h-4" />
+                <span className="hidden sm:inline">اختيار الصور</span>
+                <span className="sm:hidden text-xs">ارفع صور</span>
+              </button>
+              <button 
+                onClick={() => cameraInputRef.current?.click()}
+                className="flex-1 px-4 sm:px-8 py-3 rounded-2xl border border-stone-200 font-medium hover:bg-stone-50 transition-colors flex items-center justify-center gap-2"
+              >
+                <Camera className="w-4 h-4" />
+                <span className="hidden sm:inline">فتح الكاميرا</span>
+                <span className="sm:hidden text-xs">الكاميرا</span>
+              </button>
+              <button 
+                onClick={startGrading}
+                disabled={images.length === 0 || isGrading}
+                className="flex-[2] px-6 sm:px-8 py-3 rounded-2xl bg-emerald-600 text-white font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isGrading ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+                {isGrading && progress.total > 0 
+                  ? `${progress.phase === 'compressing' ? 'جاري ضغط الصور' : 'جاري التصحيح'} (${progress.current}/${progress.total})...` 
+                  : (gradingMode === 'paper' ? 'بدء التصحيح الورقي' : 'بدء التصحيح الذكي')}
+              </button>
+            </div>
           </div>
         </div>
       ) : (
@@ -2501,37 +2627,70 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="space-y-6"
+          id="current-grading-result"
         >
-          <div className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
+          <div className="bg-white p-4 sm:p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
             <div className="flex items-center justify-between border-b border-stone-100 pb-6">
               <div>
-                <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">تم التصحيح بنجاح</span>
-                <h3 className="text-2xl font-bold mt-1">الطالب: {currentGrading.studentName}</h3>
+                <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">
+                  {gradingMode === 'digital' ? 'تم التصحيح بنجاح' : 'تصحيح ورقي مباشر'}
+                </span>
+                <h3 className="text-xl sm:text-2xl font-bold mt-1">الطالب: {currentGrading.studentName}</h3>
               </div>
               <div className="text-right">
                 <span className="text-stone-400 text-sm">المجموع الكلي</span>
-                <div className="text-4xl font-bold text-emerald-600">{currentGrading.totalGrade} <span className="text-lg text-stone-300">/ {exam.totalGrade}</span></div>
+                <div className="text-2xl sm:text-4xl font-bold text-emerald-600">{currentGrading.totalGrade} <span className="text-lg text-stone-300">/ {exam.totalGrade}</span></div>
               </div>
             </div>
 
-            <div className="space-y-4">
-              {exam.questions.map((q: any) => (
-                <GradingResultItem 
-                  key={q.id} 
-                  question={q} 
-                  gradings={currentGrading.gradings} 
-                  onGradeChange={(qId: string, newGrade: number) => {
-                    const newGradings = currentGrading.gradings.map((g: any) => 
-                      g.questionId === qId ? { ...g, grade: newGrade } : g
-                    );
-                    const newTotal = newGradings.reduce((acc: any, curr: any) => acc + curr.grade, 0);
-                    const newResults = [...gradingResults];
-                    newResults[currentResultIndex] = { ...currentGrading, gradings: newGradings, totalGrade: newTotal };
-                    setGradingResults(newResults);
-                  }}
-                />
-              ))}
-            </div>
+            {gradingMode === 'digital' ? (
+              <div className="space-y-4">
+                {exam.questions.map((q: any) => (
+                  <GradingResultItem 
+                    key={q.id} 
+                    question={q} 
+                    gradings={currentGrading.gradings} 
+                    onGradeChange={(qId: string, newGrade: number) => {
+                      const newGradings = currentGrading.gradings.map((g: any) => 
+                        g.questionId === qId ? { ...g, grade: newGrade } : g
+                      );
+                      const newTotal = newGradings.reduce((acc: any, curr: any) => acc + curr.grade, 0);
+                      const newResults = [...gradingResults];
+                      newResults[currentResultIndex] = { ...currentGrading, gradings: newGradings, totalGrade: newTotal };
+                      setGradingResults(newResults);
+                    }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-8">
+                {Array.from(new Set(currentGrading.gradings.map((g: any) => g.pageIndex)))
+                  .filter((idx): idx is number => idx !== undefined && idx !== null)
+                  .sort((a, b) => a - b)
+                  .map((pageIdx, i) => (
+                    <div key={pageIdx} className="space-y-2">
+                      <div className="flex items-center justify-between text-stone-400 text-xs px-2">
+                        <span>الصفحة {i + 1}</span>
+                        <span>رقم الصورة في المتصفح: {pageIdx + 1}</span>
+                      </div>
+                      <VisualPaperOverlay 
+                        imageUrl={previews[pageIdx]}
+                        gradings={currentGrading.gradings.filter((g: any) => g.pageIndex === pageIdx)}
+                        studentName={currentGrading.studentName}
+                        totalGrade={currentGrading.totalGrade}
+                        maxGrade={exam.totalGrade}
+                        isFirstPage={i === 0}
+                      />
+                    </div>
+                  ))
+                }
+                {currentGrading.gradings.every((g: any) => g.pageIndex === undefined) && (
+                  <div className="text-center p-12 bg-stone-50 rounded-2xl border-2 border-dashed border-stone-200 text-stone-400">
+                    لم يتم تحديد مواقع الإجابات على الورقة لهذا الطالب. يرجى استخدام التقرير الرقمي.
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="flex flex-col md:flex-row justify-between items-center gap-6 pt-6 border-t border-stone-100">
               <div className="flex flex-wrap items-center justify-center gap-3 w-full md:w-auto">
@@ -2561,13 +2720,18 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
                   onClick={async () => {
                     const element = document.getElementById(`current-grading-result`);
                     if (element) {
-                      await generatePDFFromElement(element, `${currentGrading.studentName}_نتيجة.pdf`, { padding: '20mm', ignoreImages: true });
+                      const isPaper = gradingMode === 'paper';
+                      await generatePDFFromElement(
+                        element, 
+                        `${currentGrading.studentName}_${isPaper ? 'تصحيح_ورقي' : 'نتيجة'}.pdf`, 
+                        { padding: isPaper ? '5mm' : '20mm', ignoreImages: !isPaper }
+                      );
                     }
                   }}
                   className="flex-1 sm:flex-none px-4 py-3 rounded-xl border border-stone-200 text-stone-600 hover:bg-stone-50 flex items-center justify-center gap-2 transition-all font-bold"
                 >
                   <Download className="w-4 h-4" />
-                  تحميل النتيجة (PDF)
+                  {gradingMode === 'paper' ? 'تحميل الأوراق المصححة (PDF)' : 'تحميل النتيجة (PDF)'}
                 </button>
                 <div className="flex gap-2">
                   <button 
@@ -2576,11 +2740,40 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
                   >
                     إلغاء
                   </button>
+                  {gradingMode === 'paper' && (
+                    <button 
+                      onClick={async () => {
+                        setIsSaving(true);
+                        try {
+                          alert('سيبدأ الآن تحميل أوراق جميع الطلاب... قد يستغرق هذا وقتاً طويلاً. يرجى الانتظار.');
+                          for (let i = 0; i < gradingResults.length; i++) {
+                            setCurrentResultIndex(i);
+                            // Wait for render
+                            await new Promise(r => setTimeout(r, 1500));
+                            const element = document.getElementById(`current-grading-result`);
+                            if (element) {
+                              await generatePDFFromElement(
+                                element, 
+                                `طالب_${i+1}_${gradingResults[i].studentName}_تصحيح_ورقي.pdf`, 
+                                { padding: '5mm', ignoreImages: false }
+                              );
+                            }
+                          }
+                        } finally {
+                          setIsSaving(false);
+                        }
+                      }} 
+                      className="flex-1 px-4 py-3 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100 font-bold hover:bg-emerald-100 active:scale-95 transition-all text-center flex items-center justify-center gap-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      تحميل الكل
+                    </button>
+                  )}
                   <button 
                     onClick={() => setShowSaveModal(true)} 
                     className="flex-[2] px-8 py-3 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-600/20 active:scale-95 transition-all text-center"
                   >
-                    حفظ جميع النتائج
+                    {gradingMode === 'paper' ? 'حفظ في المجلد' : 'حفظ جميع النتائج'}
                   </button>
                 </div>
               </div>

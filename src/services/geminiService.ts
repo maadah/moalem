@@ -19,6 +19,8 @@ export interface GradingResult {
   studentAnswer: string;
   grade: number;
   feedback: string;
+  box?: [number, number, number, number]; // [ymin, xmin, ymax, xmax] normalized to 1000
+  pageIndex?: number;
 }
 
 const getApiKey = () => {
@@ -442,7 +444,16 @@ export async function gradeStudentPaper(
                   questionId: { type: Type.STRING },
                   studentAnswer: { type: Type.STRING },
                   grade: { type: Type.NUMBER },
-                  feedback: { type: Type.STRING }
+                  feedback: { type: Type.STRING },
+                  box: { 
+                    type: Type.ARRAY, 
+                    items: { type: Type.NUMBER },
+                    description: "Bounding box [ymin, xmin, ymax, xmax] of the student's answer on the page, normalized to 1000."
+                  },
+                  pageIndex: { 
+                    type: Type.NUMBER,
+                    description: "0-based index of the image/page within the provided batch where this answer was found."
+                  }
                 }
               }
             },
@@ -488,7 +499,8 @@ export async function gradeStudentPaper(
       7. **ARABIC FEEDBACK ONLY**: Provide all feedback and student names in Arabic.
       8. **CONCISE FEEDBACK**: Provide short, constructive feedback (max 15 words). Explain WHY the grade was given if it's not a full mark.
       9. Calculate the total grade for the student.
-      10. **DETERMINISM**: Be objective. Do not let external factors influence the grade.
+      10. **VISUAL MARKING**: For each answer, detect its bounding box [ymin, xmin, ymax, xmax] and the image index where it appeared (0 to ${batch.length - 1}).
+      11. **DETERMINISM**: Be objective. Do not let external factors influence the grade.
     `;
 
     const imageParts = batch.map((base64) => ({
@@ -523,6 +535,18 @@ export async function gradeStudentPaper(
 
           gradings.forEach((g: any) => {
             if (leafQuestionIds.has(g.questionId) && !seenIds.has(g.questionId)) {
+              // Map batch-relative pageIndex to global image index
+              if (g.pageIndex !== undefined) {
+                g.pageIndex = i + g.pageIndex;
+              }
+              
+              // Include maxGrade for visual display
+              const qInfo = flattenedQuestions.find(fq => fq.id === g.questionId);
+              if (qInfo) {
+                g.maxGrade = qInfo.maxGrade;
+                g.label = qInfo.label;
+              }
+              
               uniqueGradings.push(g);
               seenIds.add(g.questionId);
             }
