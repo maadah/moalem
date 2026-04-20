@@ -1910,12 +1910,13 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
 
           <div className="space-y-4">
             {questions.map((q, index) => (
-              <div key={q.id} className="p-3 sm:p-6 bg-stone-50 rounded-2xl border border-stone-200 space-y-4 relative group">
+              <div key={q.id} className="p-2 sm:p-6 bg-stone-50 rounded-2xl border border-stone-200 space-y-3 relative group">
                 <button 
                   onClick={() => removeQuestion(q.id)}
-                  className="absolute top-4 left-4 p-2 text-stone-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                  className="absolute top-2 left-2 sm:top-4 sm:left-4 p-1.5 sm:p-2 text-red-500 sm:text-stone-300 hover:text-red-500 hover:bg-red-50 bg-white sm:bg-transparent shadow-sm sm:shadow-none border border-red-100 sm:border-none rounded-xl opacity-100 sm:opacity-0 group-hover:opacity-100 transition-all z-10"
+                  title="حذف هذا السؤال بالكامل"
                 >
-                  <Trash2 className="w-4 h-4" />
+                  <Trash2 className="w-5 h-5 md:w-4 md:h-4" />
                 </button>
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:gap-4">
                   <div className="flex items-center gap-3">
@@ -1997,15 +1998,16 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                     <div className="flex flex-wrap items-center gap-3 w-full border-b border-stone-100 pb-3">
                       <div className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-bold flex items-center gap-2 flex-1">
                         <Layers className="w-3.5 h-3.5" />
-                        نظام المكونات مفعل: بإمكانك إضافة الصور والإجابات لكل فرع بالأسفل.
+                        نظام المكونات مفعل: بإمكانك إضافة الصور والإجابات لكل {q.subStyle === 'letters' ? 'فرع' : 'نقطة'} بالأسفل.
                       </div>
                       <div className="flex items-center gap-2">
                         <button 
-                          onClick={() => addSubQuestion(q.id, undefined, 'letters')}
-                          className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
-                          title="إضافة فرع جديد"
+                          onClick={() => addSubQuestion(q.id, undefined, q.subStyle || 'letters')}
+                          className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 rounded-lg transition-all flex items-center gap-1.5 text-[10px] font-bold"
+                          title={q.subStyle === 'letters' ? "إضافة فرع جديد" : "إضافة نقطة جديدة"}
                         >
-                          <Plus className="w-4 h-4" />
+                          <Plus className="w-3.5 h-3.5" />
+                          إضافة {q.subStyle === 'letters' ? 'فرع' : 'نقطة'} جديد
                         </button>
                       </div>
                     </div>
@@ -2032,7 +2034,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                 
                 {/* Sub-questions Section */}
                 {(q.subQuestions?.length || 0) > 0 && (
-                <div className="mr-1 sm:mr-4 md:mr-8 space-y-3 border-r-2 border-emerald-100 pr-2 sm:pr-3 md:pr-4 animate-in slide-in-from-right duration-300">
+                <div className="mr-0 sm:mr-4 md:mr-8 space-y-2.5 border-r-2 border-emerald-100 pr-1.5 sm:pr-3 md:pr-4 animate-in slide-in-from-right duration-300">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                     <div className="flex items-center gap-3">
                       <span className="text-[10px] font-bold text-stone-400">
@@ -2073,7 +2075,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                     </div>
                   </div>
                   {q.subQuestions?.map((sq, sqIndex) => (
-                    <div key={sq.id} className="p-2 sm:p-4 bg-blue-50/30 rounded-xl border border-blue-100 space-y-3 relative group/sub shadow-sm transition-all hover:bg-blue-50/50">
+                    <div key={sq.id} className="p-1.5 sm:p-4 bg-blue-50/30 rounded-xl border border-blue-100 space-y-2.5 relative group/sub shadow-sm transition-all hover:bg-blue-50/50">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-bold text-blue-600 shrink-0">
@@ -2109,9 +2111,16 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                             className="flex-1 bg-white px-3 py-1.5 rounded-lg border border-blue-200 text-sm outline-none focus:ring-2 focus:ring-blue-500 overflow-hidden resize-none placeholder:text-stone-400"
                           />
                         </div>
-                        <div className="flex items-center justify-between gap-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 relative">
+                          <button 
+                            onClick={() => removeQuestion(sq.id, q.id)}
+                            className="absolute -left-2 -top-2 sm:-left-10 md:-left-12 sm:top-1/2 sm:-translate-y-1/2 p-1.5 sm:p-2 text-red-500 sm:text-stone-300 hover:text-red-600 hover:bg-red-50 bg-white sm:bg-transparent shadow-sm sm:shadow-none border border-red-100 sm:border-none rounded-xl opacity-100 sm:opacity-0 group-hover/sub:opacity-100 transition-all z-10"
+                            title={q.subStyle === 'letters' ? "حذف هذا الفرع" : "حذف هذه النقطة"}
+                          >
+                            <Trash2 className="w-4 h-4 sm:w-5 sm:h-5 md:w-4 md:h-4" />
+                          </button>
                           <div className="flex flex-col gap-1">
-                            {(!sq.subQuestions?.length && !sq.questionImage) && (
+                            {(!sq.subQuestions?.length && !sq.questionImage && q.subStyle === 'letters') && (
                               <p className="text-[9px] font-bold text-stone-400">بإمكانك إضافة صورة أو نقاط لهذا الفرع:</p>
                             )}
                             <div className="flex items-center gap-2">
@@ -2122,13 +2131,15 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                                 onRemove={() => updateQuestion(sq.id, { questionImage: undefined }, q.id)}
                                 compact
                               />
-                              <button 
-                                onClick={() => addSubQuestion(q.id, sq.id, 'numbers')}
-                                className="text-[9px] text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-white border border-blue-100 px-2 py-1 rounded-md transition-all shadow-sm"
-                                title="إضافة نقاط داخل هذا الفرع"
-                              >
-                                <Plus className="w-2.5 h-2.5" /> إضافة نقاط
-                              </button>
+                              {!sq.subQuestions?.length && q.subStyle === 'letters' && (
+                                <button 
+                                  onClick={() => addSubQuestion(q.id, sq.id, 'numbers')}
+                                  className="text-[9px] text-blue-600 hover:text-blue-700 flex items-center gap-1 bg-white border border-blue-100 px-2 py-1 rounded-md transition-all shadow-sm"
+                                  title="بدء إضافة نقاط داخل هذا الفرع"
+                                >
+                                  <Plus className="w-2.5 h-2.5" /> إضافة نقاط
+                                </button>
+                              )}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -2140,94 +2151,108 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                               className="w-12 px-1 py-0.5 rounded-md border border-stone-200 text-xs text-center"
                             />
                           </div>
-                          <button 
-                            onClick={() => removeQuestion(sq.id, q.id)}
-                            className="p-1 text-stone-400 sm:text-stone-300 hover:text-red-500 sm:opacity-0 sm:group-hover/sub:opacity-100 transition-all"
-                          >
-                            <Trash2 className="w-4 h-4 sm:w-3 sm:h-3" />
-                          </button>
+                            
                         </div>
                       </div>
 
                       {/* Level 3: Points inside a Branch */}
-                      <div className="mr-1 sm:mr-4 md:mr-6 space-y-2 border-r-2 border-blue-200 pr-1 sm:pr-3">
+                      <div className="mr-0 sm:mr-4 md:mr-6 space-y-2 border-r-2 border-blue-200 pr-1 sm:pr-3">
                         {sq.subQuestions && sq.subQuestions.length > 0 && (
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                             <span className="text-[9px] font-bold text-blue-500">النقاط داخل هذا الفرع:</span>
-                            <div className="flex items-center gap-2">
-                              <span className="text-[9px] text-stone-400">عدد النقاط المطلوب حلها:</span>
-                              <input 
-                                type="number" 
-                                value={sq.requiredSubCount || ''} 
-                                onChange={(e) => updateQuestion(sq.id, { requiredSubCount: e.target.value ? Number(e.target.value) : undefined }, q.id)}
-                                placeholder={sq.subQuestions?.length.toString()}
-                                className="w-8 px-1 py-0.5 rounded border border-blue-200 text-[9px] text-center"
-                              />
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[9px] text-stone-400">المطلوب حلها:</span>
+                                <input 
+                                  type="number" 
+                                  value={sq.requiredSubCount || ''} 
+                                  onChange={(e) => updateQuestion(sq.id, { requiredSubCount: e.target.value ? Number(e.target.value) : undefined }, q.id)}
+                                  placeholder={sq.subQuestions?.length.toString()}
+                                  className="w-8 px-1 py-0.5 rounded border border-blue-200 text-[9px] text-center"
+                                />
+                              </div>
+                              <button 
+                                onClick={() => addSubQuestion(q.id, sq.id, 'numbers')}
+                                className="text-[9px] text-emerald-600 hover:text-emerald-700 flex items-center gap-1 bg-white border border-emerald-100 px-2.5 py-1 rounded-md transition-all shadow-sm"
+                              >
+                                <Plus className="w-2.5 h-2.5" /> إضافة نقطة جديدة
+                              </button>
                             </div>
                           </div>
                         )}
                         {sq.subQuestions?.map((ssq, ssqIndex) => (
-                          <div key={ssq.id} className="flex flex-col gap-2 bg-emerald-50/20 p-2 rounded-lg border border-emerald-100 shadow-sm transition-all hover:bg-emerald-50/40">
-                            <div className="flex items-start gap-2">
-                              <span className="text-[10px] font-bold text-emerald-600 mt-1 shrink-0">{ssqIndex + 1}-</span>
-                              <div className="flex-1 space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <textarea 
-                                    value={ssq.text} 
-                                    onChange={(e) => {
-                                      updateQuestion(ssq.id, { text: e.target.value }, q.id, sq.id);
-                                      e.target.style.height = 'auto';
-                                      e.target.style.height = e.target.scrollHeight + 'px';
-                                    }}
-                                    placeholder="نص النقطة..."
-                                    rows={1}
-                                    className="flex-1 bg-white px-2 py-1 rounded border border-emerald-200 text-[11px] outline-none resize-none overflow-hidden placeholder:text-stone-300"
-                                  />
-                                  <div className="flex items-center gap-1 shrink-0">
+                          <div key={ssq.id} className="relative group/point animate-in slide-in-from-right-2 duration-300">
+                            <button 
+                              onClick={() => removeQuestion(ssq.id, q.id, sq.id)}
+                              className="absolute -left-2 -top-2 sm:-left-10 sm:top-1/2 sm:-translate-y-1/2 p-1.5 sm:p-2 text-red-500 sm:text-stone-300 hover:text-red-600 hover:bg-red-50 bg-white sm:bg-transparent shadow-md sm:shadow-none border border-red-100 sm:border-none rounded-lg opacity-100 sm:opacity-0 group-hover/point:opacity-100 transition-all z-10"
+                              title="حذف هذه النقطة"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 md:w-3.5 md:h-3.5" />
+                            </button>
+                            <div className="flex flex-col gap-1.5 bg-emerald-50/20 p-1.5 sm:p-3 rounded-lg border border-emerald-100 shadow-sm transition-all hover:bg-emerald-50/40">
+                              <div className="flex items-start gap-2">
+                                <span className="text-[10px] font-bold text-emerald-600 mt-1 shrink-0">{ssqIndex + 1}-</span>
+                                <div className="flex-1 space-y-2">
+                                  <div className="flex items-center gap-1.5">
+                                    <textarea 
+                                      value={ssq.text} 
+                                      onChange={(e) => {
+                                        updateQuestion(ssq.id, { text: e.target.value }, q.id, sq.id);
+                                        e.target.style.height = 'auto';
+                                        e.target.style.height = e.target.scrollHeight + 'px';
+                                      }}
+                                      onFocus={(e) => {
+                                        e.target.style.height = 'auto';
+                                        e.target.style.height = e.target.scrollHeight + 'px';
+                                      }}
+                                      placeholder="نص النقطة..."
+                                      rows={1}
+                                      className="flex-1 bg-white px-2 sm:px-3 py-1.5 rounded border border-emerald-200 text-[11px] outline-none resize-none overflow-hidden placeholder:text-stone-300 shadow-sm"
+                                    />
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <ImageUpload 
+                                        label="سؤال" 
+                                        value={ssq.questionImage} 
+                                        onChange={(base64) => updateQuestion(ssq.id, { questionImage: base64 }, q.id, sq.id)}
+                                        onRemove={() => updateQuestion(ssq.id, { questionImage: undefined }, q.id, sq.id)}
+                                        compact
+                                      />
+                                      <input 
+                                        type="number" 
+                                        value={ssq.grade || ''} 
+                                        onChange={(e) => updateQuestion(ssq.id, { grade: Number(e.target.value) }, q.id, sq.id)}
+                                        placeholder="درجة"
+                                        className="w-10 px-1 py-0.5 rounded border border-emerald-200 text-[10px] text-center bg-white"
+                                      />
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="p-1 bg-emerald-100 rounded-md">
+                                      <CheckSquare className="w-2.5 h-2.5 sm:w-3 sm:h-3 text-emerald-700" />
+                                    </div>
+                                    <textarea 
+                                      value={ssq.answer} 
+                                      onChange={(e) => {
+                                        updateQuestion(ssq.id, { answer: e.target.value }, q.id, sq.id);
+                                        e.target.style.height = 'auto';
+                                        e.target.style.height = e.target.scrollHeight + 'px';
+                                      }}
+                                      onFocus={(e) => {
+                                        e.target.style.height = 'auto';
+                                        e.target.style.height = e.target.scrollHeight + 'px';
+                                      }}
+                                      placeholder="الجواب النموذجي للنقطة..."
+                                      rows={1}
+                                      className="flex-1 bg-white/80 px-2 sm:px-3 py-1.5 rounded border border-emerald-100 text-[10px] outline-none min-h-[32px] resize-none overflow-hidden shadow-sm"
+                                    />
                                     <ImageUpload 
-                                      label="سؤال" 
-                                      value={ssq.questionImage} 
-                                      onChange={(base64) => updateQuestion(ssq.id, { questionImage: base64 }, q.id, sq.id)}
-                                      onRemove={() => updateQuestion(ssq.id, { questionImage: undefined }, q.id, sq.id)}
+                                      label="جواب" 
+                                      value={ssq.answerImage} 
+                                      onChange={(base64) => updateQuestion(ssq.id, { answerImage: base64 }, q.id, sq.id)}
+                                      onRemove={() => updateQuestion(ssq.id, { answerImage: undefined }, q.id, sq.id)}
                                       compact
                                     />
-                                    <input 
-                                      type="number" 
-                                      value={ssq.grade || ''} 
-                                      onChange={(e) => updateQuestion(ssq.id, { grade: Number(e.target.value) }, q.id, sq.id)}
-                                      placeholder="درجة"
-                                      className="w-10 px-1 py-0.5 rounded border border-emerald-200 text-[10px] text-center bg-white"
-                                    />
-                                    <button 
-                                      onClick={() => removeQuestion(ssq.id, q.id, sq.id)}
-                                      className="text-stone-300 hover:text-red-500 transition-colors"
-                                    >
-                                      <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
-                                    </button>
                                   </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  <div className="p-1 bg-emerald-100 rounded-md">
-                                    <CheckSquare className="w-3 h-3 text-emerald-700" />
-                                  </div>
-                                  <textarea 
-                                    value={ssq.answer} 
-                                    onChange={(e) => {
-                                      updateQuestion(ssq.id, { answer: e.target.value }, q.id, sq.id);
-                                      e.target.style.height = 'auto';
-                                      e.target.style.height = e.target.scrollHeight + 'px';
-                                    }}
-                                    placeholder="الجواب النموذجي للنقطة..."
-                                    rows={1}
-                                    className="flex-1 bg-white/80 px-2 py-1 rounded border border-emerald-100 text-[10px] outline-none min-h-[32px] resize-none overflow-hidden"
-                                  />
-                                  <ImageUpload 
-                                    label="جواب" 
-                                    value={ssq.answerImage} 
-                                    onChange={(base64) => updateQuestion(ssq.id, { answerImage: base64 }, q.id, sq.id)}
-                                    onRemove={() => updateQuestion(ssq.id, { answerImage: undefined }, q.id, sq.id)}
-                                    compact
-                                  />
                                 </div>
                               </div>
                             </div>
