@@ -763,7 +763,7 @@ function App() {
         </div>
       </nav>
 
-      <main className="max-w-7xl mx-auto p-4 md:p-8 pb-24 md:pb-8">
+      <main className="max-w-7xl mx-auto p-2 sm:p-4 md:p-8 pb-24 md:pb-8">
         <AnimatePresence mode="wait">
           {view === 'dashboard' && (
             <Dashboard 
@@ -1564,7 +1564,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
       initial={{ opacity: 0, x: 20 }}
       animate={{ opacity: 1, x: 0 }}
       exit={{ opacity: 0, x: -20 }}
-      className="max-w-4xl mx-auto space-y-8"
+      className="max-w-4xl mx-auto space-y-8 px-0.5 sm:px-0"
     >
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4" data-html2canvas-ignore>
         <h2 className="text-2xl md:text-3xl font-bold font-serif italic">
@@ -1910,7 +1910,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
 
           <div className="space-y-4">
             {questions.map((q, index) => (
-              <div key={q.id} className="p-6 bg-stone-50 rounded-2xl border border-stone-200 space-y-4 relative group">
+              <div key={q.id} className="p-3 sm:p-6 bg-stone-50 rounded-2xl border border-stone-200 space-y-4 relative group">
                 <button 
                   onClick={() => removeQuestion(q.id)}
                   className="absolute top-4 left-4 p-2 text-stone-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
@@ -1920,16 +1920,19 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                 <div className="flex flex-col sm:flex-row sm:items-center gap-3 md:gap-4">
                   <div className="flex items-center gap-3">
                     <span className="w-8 h-8 bg-white rounded-lg flex items-center justify-center font-bold text-stone-400 border border-stone-200 shrink-0">{index + 1}</span>
-                    <select 
-                      value={q.type} 
-                      onChange={(e) => updateQuestion(q.id, { type: e.target.value as any })}
-                      className="bg-white px-3 py-1.5 rounded-lg border border-stone-200 text-sm outline-none w-full sm:w-auto"
-                    >
-                      <option value="text">نصي</option>
-                      <option value="true-false">صح / خطأ</option>
-                      <option value="multiple-choice">اختيارات</option>
-                      <option value="fill-in-the-blanks">فراغات</option>
-                    </select>
+                    {/* Status Indicators - more polished */}
+                    <div className="flex items-center gap-2">
+                       {(q.questionImage || q.answerImage) && (
+                         <div className="flex items-center gap-1 px-2.5 py-1 bg-emerald-100 text-emerald-700 rounded-full border border-emerald-200 text-[10px] font-bold shadow-sm">
+                           <ImageIcon className="w-3 h-3" /> مرفق صور
+                         </div>
+                       )}
+                       {(q.subQuestions?.length || 0) > 0 && (
+                         <div className="flex items-center gap-1 px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full border border-blue-200 text-[10px] font-bold shadow-sm">
+                           <Layers className="w-3 h-3" /> نظام {q.subStyle === 'letters' ? 'فروع' : 'نقاط'}
+                         </div>
+                       )}
+                    </div>
                   </div>
                   <div className="hidden sm:block flex-1" />
                   <div className="flex items-center justify-between sm:justify-end gap-2">
@@ -1960,8 +1963,58 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                   className="w-full bg-white px-4 py-2 rounded-xl border border-stone-200 outline-none focus:ring-2 focus:ring-emerald-500 overflow-hidden resize-none"
                 />
 
-                {(!q.subQuestions || q.subQuestions.length === 0) && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Quick Add Menu */}
+                <div className="space-y-2 py-1" data-html2canvas-ignore>
+                  {(!q.subQuestions?.length && !q.questionImage && !q.answerImage) && (
+                    <p className="text-[10px] font-bold text-stone-400 mb-1">بإمكانك إضافة صورة أو فروع أو نقاط إذا كان السؤال الرئيسي يحتوي على ذلك:</p>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!q.subQuestions?.length && !q.questionImage && !q.answerImage && (
+                      <button 
+                        onClick={() => updateQuestion(q.id, { questionImage: '' })}
+                        className="text-[10px] text-stone-500 hover:text-emerald-600 flex items-center gap-1 bg-white border border-stone-100 px-3 py-1.5 rounded-lg transition-all shadow-sm"
+                      >
+                        <ImageIcon className="w-3 h-3 text-emerald-500" /> إضافة صور للسؤال
+                      </button>
+                    )}
+                  {(!q.subQuestions || q.subQuestions.length === 0) && (
+                    <>
+                      <button 
+                        onClick={() => addSubQuestion(q.id, undefined, 'letters')}
+                        className="text-[10px] text-stone-500 hover:text-emerald-600 flex items-center gap-1 bg-white border border-stone-100 px-3 py-1.5 rounded-lg transition-all"
+                      >
+                        <Layers className="w-3 h-3" /> إضافة فروع (أ، ب، ج)
+                      </button>
+                      <button 
+                        onClick={() => addSubQuestion(q.id, undefined, 'numbers')}
+                        className="text-[10px] text-stone-500 hover:text-emerald-600 flex items-center gap-1 bg-white border border-stone-100 px-3 py-1.5 rounded-lg transition-all"
+                      >
+                        <Plus className="w-3 h-3" /> إضافة نقاط (1، 2، 3)
+                      </button>
+                    </>
+                  )}
+                  {(q.subQuestions?.length || 0) > 0 && (
+                    <div className="flex flex-wrap items-center gap-3 w-full border-b border-stone-100 pb-3">
+                      <div className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-[10px] font-bold flex items-center gap-2 flex-1">
+                        <Layers className="w-3.5 h-3.5" />
+                        نظام المكونات مفعل: بإمكانك إضافة الصور والإجابات لكل فرع بالأسفل.
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => addSubQuestion(q.id, undefined, 'letters')}
+                          className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                          title="إضافة فرع جديد"
+                        >
+                          <Plus className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+                {(!q.subQuestions || q.subQuestions.length === 0) && (q.questionImage !== undefined || q.answerImage !== undefined || q.questionImage || q.answerImage) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in duration-300">
                     <ImageUpload 
                       label="صورة السؤال" 
                       value={q.questionImage} 
@@ -1978,7 +2031,8 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                 )}
                 
                 {/* Sub-questions Section */}
-                <div className="mr-4 md:mr-8 space-y-3 border-r-2 border-emerald-100 pr-3 md:pr-4">
+                {(q.subQuestions?.length || 0) > 0 && (
+                <div className="mr-1 sm:mr-4 md:mr-8 space-y-3 border-r-2 border-emerald-100 pr-2 sm:pr-3 md:pr-4 animate-in slide-in-from-right duration-300">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
                     <div className="flex items-center gap-3">
                       <span className="text-[10px] font-bold text-stone-400">
@@ -2019,22 +2073,24 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                     </div>
                   </div>
                   {q.subQuestions?.map((sq, sqIndex) => (
-                    <div key={sq.id} className="p-4 bg-white rounded-xl border border-stone-100 space-y-3 relative group/sub shadow-sm">
+                    <div key={sq.id} className="p-2 sm:p-4 bg-white rounded-xl border border-stone-100 space-y-3 relative group/sub shadow-sm">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-bold text-emerald-600 shrink-0">
                             {q.subStyle === 'letters' ? `(${String.fromCharCode(97 + sqIndex)})` : `${sqIndex + 1}-`}
                           </span>
-                          <select 
-                            value={sq.type} 
-                            onChange={(e) => updateQuestion(sq.id, { type: e.target.value as any }, q.id)}
-                            className="bg-stone-50 px-2 py-1 rounded border border-stone-200 text-[10px] outline-none"
-                          >
-                            <option value="text">نصي</option>
-                            <option value="true-false">صح / خطأ</option>
-                            <option value="multiple-choice">اختيارات</option>
-                            <option value="fill-in-the-blanks">فراغات</option>
-                          </select>
+                          <div className="flex items-center gap-1">
+                            {(sq.questionImage || sq.answerImage) && (
+                              <div className="flex items-center gap-0.5 px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-md border border-emerald-200 text-[8px] font-bold shadow-sm">
+                                <ImageIcon className="w-2 h-2" /> مرفق صور
+                              </div>
+                            )}
+                            {(sq.subQuestions?.length || 0) > 0 && (
+                              <div className="flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-md border border-blue-200 text-[8px] font-bold shadow-sm">
+                                <Layers className="w-2 h-2" /> يضم نقاط
+                              </div>
+                            )}
+                          </div>
                         </div>
                         <div className="flex flex-1 gap-2">
                           <textarea 
@@ -2054,14 +2110,27 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                           />
                         </div>
                         <div className="flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-2">
-                            <ImageUpload 
-                              label="صورة" 
-                              value={sq.questionImage} 
-                              onChange={(base64) => updateQuestion(sq.id, { questionImage: base64 }, q.id)}
-                              onRemove={() => updateQuestion(sq.id, { questionImage: undefined }, q.id)}
-                              compact
-                            />
+                          <div className="flex flex-col gap-1">
+                            {(!sq.subQuestions?.length && !sq.questionImage) && (
+                              <p className="text-[9px] font-bold text-stone-400">بإمكانك إضافة صورة أو نقاط لهذا الفرع:</p>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <ImageUpload 
+                                label="صورة" 
+                                value={sq.questionImage} 
+                                onChange={(base64) => updateQuestion(sq.id, { questionImage: base64 }, q.id)}
+                                onRemove={() => updateQuestion(sq.id, { questionImage: undefined }, q.id)}
+                                compact
+                              />
+                              {!sq.subQuestions?.length && (
+                                <button 
+                                  onClick={() => addSubQuestion(q.id, sq.id, 'numbers')}
+                                  className="text-[9px] text-stone-500 hover:text-emerald-600 flex items-center gap-1 bg-stone-50 border border-stone-100 px-2 py-1 rounded-md transition-all"
+                                >
+                                  <Plus className="w-2.5 h-2.5 text-emerald-500" /> إضافة نقاط
+                                </button>
+                              )}
+                            </div>
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-[10px] text-stone-400">الدرجة:</span>
@@ -2082,7 +2151,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                       </div>
 
                       {/* Level 3: Points inside a Branch */}
-                      <div className="mr-4 md:mr-6 space-y-2 border-r border-stone-200 pr-3">
+                      <div className="mr-1 sm:mr-4 md:mr-6 space-y-2 border-r border-stone-200 pr-1 sm:pr-3">
                         {sq.subQuestions && sq.subQuestions.length > 0 && (
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
                             <span className="text-[9px] font-bold text-stone-400">النقاط والترك:</span>
@@ -2102,6 +2171,13 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                           <div key={ssq.id} className="flex flex-col sm:flex-row sm:items-center gap-3 bg-stone-50/50 p-2 rounded-lg border border-stone-100">
                             <div className="flex items-center gap-2 flex-1">
                               <span className="text-[10px] font-bold text-emerald-500 shrink-0">{ssqIndex + 1}-</span>
+                              <div className="flex items-center gap-1">
+                                {(ssq.questionImage || ssq.answerImage) && (
+                                  <div className="flex items-center gap-0.5 px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-md border border-emerald-200 text-[8px] font-bold shadow-sm">
+                                    <ImageIcon className="w-2 h-2" /> مرفق صور
+                                  </div>
+                                )}
+                              </div>
                               <textarea 
                                 value={ssq.text} 
                                 onChange={(e) => {
@@ -2154,37 +2230,14 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                             </div>
                           </div>
                         ))}
-                        <button 
-                          onClick={() => addSubQuestion(q.id, sq.id, 'numbers')}
-                          className="text-[9px] text-emerald-500 hover:underline flex items-center gap-1"
-                        >
-                          <Plus className="w-2.5 h-2.5" /> إضافة نقاط لهذا الفرع (1، 2، 3...)
-                        </button>
                       </div>
 
-                      {sq.type === 'multiple-choice' && (
-                        <div className="mr-8 space-y-1">
-                          <label className="text-[10px] font-medium text-stone-400">الخيارات (افصل بينها بفاصلة)</label>
-                          <textarea 
-                            value={sq.options?.join(', ') || ''} 
-                            onChange={(e) => {
-                              updateQuestion(sq.id, { options: e.target.value.split(',').map(s => s.trim()) }, q.id);
-                              e.target.style.height = 'auto';
-                              e.target.style.height = e.target.scrollHeight + 'px';
-                            }}
-                            onFocus={(e) => {
-                              e.target.style.height = 'auto';
-                              e.target.style.height = e.target.scrollHeight + 'px';
-                            }}
-                            placeholder="خيار 1, خيار 2..."
-                            rows={1}
-                            className="w-full bg-stone-50 px-3 py-1 rounded-lg border border-stone-200 text-[10px] outline-none overflow-hidden resize-none"
-                          />
-                        </div>
-                      )}
-
                       {(!sq.subQuestions || sq.subQuestions.length === 0) && (
-                        <>
+                        <div className="space-y-2 animate-in fade-in duration-300">
+                          <div className="flex items-center gap-1.5 px-0.5">
+                            <CheckSquare className="w-3 h-3 text-emerald-600" />
+                            <span className="text-[9px] font-bold text-stone-500 text-right">إجابة الفرع النموذجية:</span>
+                          </div>
                           <textarea 
                             value={sq.answer} 
                             onChange={(e) => {
@@ -2196,9 +2249,9 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                               e.target.style.height = 'auto';
                               e.target.style.height = e.target.scrollHeight + 'px';
                             }}
-                            placeholder="الإجابة النموذجية للفرع..."
+                            placeholder="أدخل الإجابة النموذجية لهذا الفرع..."
                             rows={1}
-                            className="w-full bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-100 text-xs outline-none focus:ring-2 focus:ring-emerald-500 overflow-hidden resize-none min-h-[40px]"
+                            className="w-full bg-emerald-50/30 px-3 py-2 rounded-lg border border-emerald-100 text-xs outline-none focus:ring-2 focus:ring-emerald-500 overflow-hidden resize-none min-h-[40px]"
                           />
                           <div className="grid grid-cols-2 gap-4 mt-2">
                             <ImageUpload 
@@ -2208,48 +2261,19 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                               onRemove={() => updateQuestion(sq.id, { answerImage: undefined }, q.id)}
                             />
                           </div>
-                        </>
+                        </div>
                       )}
                     </div>
                   ))}
-                  <div className="flex items-center gap-4 pt-2" data-html2canvas-ignore>
-                    <button 
-                      onClick={() => addSubQuestion(q.id, undefined, 'letters')}
-                      className="text-[10px] text-emerald-600 font-bold hover:underline flex items-center gap-1 bg-emerald-50 px-3 py-1.5 rounded-lg"
-                    >
-                      <Plus className="w-3 h-3" /> إضافة فرع (أ، ب، ج...)
-                    </button>
-                    <button 
-                      onClick={() => addSubQuestion(q.id, undefined, 'numbers')}
-                      className="text-[10px] text-emerald-600 font-bold hover:underline flex items-center gap-1 bg-stone-50 px-3 py-1.5 rounded-lg"
-                    >
-                      <Plus className="w-3 h-3" /> إضافة نقطة (1، 2، 3...)
-                    </button>
-                  </div>
                 </div>
+                )}
 
                 {(!q.subQuestions || q.subQuestions.length === 0) && (
-                  <>
-                    {q.type === 'multiple-choice' && (
-                      <div className="space-y-2">
-                        <label className="text-xs font-medium text-stone-400">الخيارات (افصل بينها بفاصلة)</label>
-                        <textarea 
-                          value={q.options?.join(', ') || ''} 
-                          onChange={(e) => {
-                            updateQuestion(q.id, { options: e.target.value.split(',').map(s => s.trim()) });
-                            e.target.style.height = 'auto';
-                            e.target.style.height = e.target.scrollHeight + 'px';
-                          }}
-                          onFocus={(e) => {
-                            e.target.style.height = 'auto';
-                            e.target.style.height = e.target.scrollHeight + 'px';
-                          }}
-                          placeholder="خيار 1, خيار 2, خيار 3..."
-                          rows={1}
-                          className="w-full bg-white px-4 py-2 rounded-xl border border-stone-200 outline-none overflow-hidden resize-none"
-                        />
-                      </div>
-                    )}
+                  <div className="space-y-2 animate-in slide-in-from-bottom-2 duration-300">
+                    <div className="flex items-center gap-2 px-1">
+                      <CheckCircle className="w-3.5 h-3.5 text-emerald-600" />
+                      <span className="text-xs font-bold text-stone-500">الإجابة النموذجية للسؤال:</span>
+                    </div>
                     <textarea 
                       value={q.answer} 
                       onChange={(e) => {
@@ -2261,11 +2285,11 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                         e.target.style.height = 'auto';
                         e.target.style.height = e.target.scrollHeight + 'px';
                       }}
-                      placeholder="الإجابة النموذجية..."
+                      placeholder="اكتب الإجابة التي سيتم التصحيح بناءً عليها..."
                       rows={1}
-                      className="w-full bg-white px-4 py-2 rounded-xl border border-stone-200 outline-none focus:ring-2 focus:ring-emerald-500 overflow-hidden resize-none min-h-[80px]"
+                      className="w-full bg-emerald-50/50 px-4 py-3 rounded-xl border border-emerald-100 outline-none focus:ring-2 focus:ring-emerald-500 placeholder:text-stone-400 text-stone-700 min-h-[80px] text-sm"
                     />
-                  </>
+                  </div>
                 )}
               </div>
             ))}
