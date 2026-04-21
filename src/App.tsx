@@ -2444,8 +2444,8 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const newFiles = Array.from(e.target.files);
-      if (images.length + newFiles.length > 150) {
-        alert('عذراً، لا يمكن رفع أكثر من 150 صفحة في المرة الواحدة.');
+      if (images.length + newFiles.length > 24) {
+        alert('عذراً، لا يمكن رفع أكثر من 24 صفحة في المرة الواحدة.');
         return;
       }
       setImages([...images, ...newFiles]);
@@ -2610,8 +2610,13 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
             ))}
           </div>
 
-          <div className="flex flex-col items-center gap-4">
-            <div className="flex bg-stone-100 p-1.5 rounded-2xl gap-2 w-full max-w-sm">
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
+              <HelpCircle className="w-3 h-3" />
+              بإمكانك رفع حتى 24 صفحة في المرة الواحدة لضمان سرعة المعالجة
+            </p>
+            <div className="flex flex-col items-center gap-4 w-full">
+              <div className="flex bg-stone-100 p-1.5 rounded-2xl gap-2 w-full max-w-sm">
               <button 
                 onClick={() => setGradingMode('digital')}
                 className={cn(
@@ -2674,6 +2679,7 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
             </div>
           </div>
         </div>
+      </div>
       ) : (
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
