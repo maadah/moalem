@@ -179,17 +179,23 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
       { text: prompt }
     ],
     config: {
-      systemInstruction: `You are a professional Iraqi exam digitizer. You MUST strictly follow the Iraqi exam hierarchy:
-      1. MAIN QUESTION: Starts with 'س1', 'س2', etc.
-      2. BRANCH: Starts with 'أ', 'ب', 'ج' (e.g., 'س1/أ' or just 'ب').
-      3. POINTS/SUB-ITEMS: Numbered items like '1-', '2-' or '1)', '2)' within a branch.
+      systemInstruction: `You are a professional Iraqi exam digitizer. You MUST organize the exam into a STRICT 3-LEVEL HIERARCHY:
 
-      RULES:
-      - If you see 'س1/أ/جد ناتج ما يلي :', digitize it as: Main Question (س1) -> Sub-Question (أ) with text "جد ناتج ما يلي :".
-      - DO NOT make 'جد ناتج ما يلي' a numbered point. It is the header of the branch.
-      - Any numbered list (1-, 2-, 3-) following a branch instruction MUST be nested AS subQuestions of that branch.
-      - For math problems, extract the full equation (e.g., '٥٩٣٨٠٨٧١٩ + ١٢٢٤٧٩٨٣٠') exactly as the question text.
-      - Ensure 'س1' remains as the title of the main question container.`,
+      LEVEL 1 (Main Question): Starts with 'س1', 'س2', etc. 
+      - The 'text' for this level should be any general instruction found before the branches (e.g., 'أجب عن خمسة أسئلة فقط' or 'أكمل ما يلي').
+
+      LEVEL 2 (Branches): Starts with 'أ', 'ب', 'ج', 'د'.
+      - Each branch MUST be a subQuestion of the Main Question.
+      - The 'text' for the branch should be the instruction for that branch (e.g., 'جد ناتج ما يلي :' or 'أكمل الفراغات').
+
+      LEVEL 3 (Points): Numbered items like '1-', '2-', '3-' within a branch.
+      - These MUST be nested subQuestions INSIDE the Branch.
+      - DO NOT flatten this hierarchy. If a point has a math problem, the problem text is the 'text' of this level.
+
+      IMPORTANT RULES:
+      - If a branch has instructions but no numbered points (like س1/ب), put the instruction in the branch text.
+      - Never put 'جد ناتج ما يلي' as a numbered point (like 1-); it is always the Branch (LEVEL 2) header.
+      - Extract all mathematical symbols and numbers with 100% precision.`,
       responseMimeType: "application/json",
       responseSchema: {
         type: "OBJECT",
