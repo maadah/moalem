@@ -45,8 +45,8 @@ const getApiKey = () => {
 
 async function retryWithBackoff<T>(
   fn: () => Promise<T>,
-  maxRetries: number = 3,
-  initialDelay: number = 1000
+  maxRetries: number = 5,
+  initialDelay: number = 2000
 ): Promise<T> {
   let lastError: any;
   for (let i = 0; i < maxRetries; i++) {
@@ -54,18 +54,21 @@ async function retryWithBackoff<T>(
       return await fn();
     } catch (error: any) {
       lastError = error;
+      const errorMsg = error.message || "";
       const isRetryable = 
-        error.message?.includes('503') || 
-        error.message?.includes('500') || 
-        error.message?.includes('429') || 
-        error.message?.includes('quota') ||
-        error.message?.includes('high demand') ||
-        error.message?.includes('UNAVAILABLE');
+        errorMsg.includes('503') || 
+        errorMsg.includes('500') || 
+        errorMsg.includes('429') || 
+        errorMsg.includes('quota') ||
+        errorMsg.includes('limit') ||
+        errorMsg.includes('high demand') ||
+        errorMsg.includes('RESOURCE_EXHAUSTED') ||
+        errorMsg.includes('UNAVAILABLE');
 
       if (!isRetryable || i === maxRetries - 1) throw error;
       
       const delay = initialDelay * Math.pow(2, i);
-      console.warn(`Retryable error occurred (attempt ${i + 1}/${maxRetries}). Retrying in ${delay}ms...`, error.message);
+      console.warn(`Retryable error occurred (attempt ${i + 1}/${maxRetries}). Retrying in ${delay}ms...`, errorMsg);
       await new Promise(resolve => setTimeout(resolve, delay));
     }
   }
@@ -127,8 +130,7 @@ function robustJsonParse(text: string): any {
 }
 
 export async function extractExamFromImages(base64Images: string[], apiKey: string): Promise<{ title: string, questions: Question[], requiredQuestionsCount?: number }> {
-  // Explicitly set apiVersion to ensure model compatibility (gemini-1.5-flash is stable on v1)
-  const ai = new GoogleGenAI({ apiKey, apiVersion: 'v1' });
+  const ai = new GoogleGenAI({ apiKey });
   const prompt = `
     You are an expert at reading Arabic Iraqi school exam papers. Analyze the provided image(s) and extract ALL questions into a structured JSON.
 
@@ -171,7 +173,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
   }));
 
   const response = await retryWithBackoff(() => ai.models.generateContent({
-    model: "gemini-1.5-flash",
+    model: "gemini-3-flash-preview",
     contents: [
       ...imageParts,
       { text: prompt }
@@ -384,7 +386,7 @@ export async function gradeStudentPaper(
 
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("API Key missing");
-  const ai = new GoogleGenAI({ apiKey, apiVersion: 'v1' });
+  const ai = new GoogleGenAI({ apiKey });
 
   const flattenedQuestions: any[] = [];
   const leafQuestionIds = new Set<string>();
@@ -413,7 +415,7 @@ export async function gradeStudentPaper(
     Use IDs exactly. Feedback in Arabic.`;
 
   const response = await retryWithBackoff(() => ai.models.generateContent({
-    model: "gemini-1.5-flash",
+    model: "gemini-3-flash-preview",
     contents: [
       ...base64Images.map(data => ({ inlineData: { data, mimeType: "image/jpeg" } })),
       { text: prompt }
