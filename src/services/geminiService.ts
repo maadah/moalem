@@ -183,19 +183,23 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     3. For each main question, identify if it has branches (أ، ب، ج) or points (1، 2، 3).
     4. Ensure your JSON reflects this hierarchy using "subQuestions".
     
-    IRAQI EXAM FORMAT RULES:
-    - **"س1، س2، س3..."**: Level 1 (Top Level).
-    - **"أ، ب، ج، د..."**: Level 2 (Branches). These MUST BE in the "subQuestions" array of the preceding "س" question.
-    - **"1، 2، 3، 4..."**: Level 3 (Points). If they follow a branch (أ، ب)، they MUST be nested inside that branch. If they follow "س" directly, they are Level 2.
+    IRAQI EXAM FORMAT RULES (STRICT HIERARCHY):
+    - **LEVEL 1 (The Parent)**: Starts with "س1", "س2", "س3", etc. These are the ONLY elements allowed in the root "questions" array.
+    - **LEVEL 2 (The Branch)**: Starts with "أ", "ب", "ج", etc. These MUST ALWAYS be nested inside the "subQuestions" array of the preceding Level 1 "س" question. 
+    - **LEVEL 3 (The Point)**: Starts with "1-", "2-", "1)", "2)", etc. 
+      - If they follow a branch (أ، ب), they MUST be nested inside that branch's "subQuestions" (making them children of the branch).
+      - If they follow a main question (س) directly (no letters), they are Level 2 children of that "س".
+
+    CRITICAL SPLITTING RULES (Combined Labels):
+    - **COMBINED "س1/أ"**: If you see "س1/أ: [text]", you MUST extract it as a hierarchy:
+      - Create a Level 1 Question with text "س1".
+      - Create a Level 2 Branch inside its "subQuestions" with text "أ) [text]".
+      - If subsequent items are "1-", "2-", they go inside the "subQuestions" of that Level 2 Branch.
+    - **NEVER** output a flat list where "س1" and "أ" are at the same level.
     
-    CRITICAL STRUCTURE RULES (Split Combined Labels):
-    - **MANDATORY SPLIT**: If you see combined labels like "س1/أ", "س1-أ", or "س1: أ", you MUST split them into TWO levels:
-      1. Parent (Level 1): Text: "س1".
-      2. Child (Level 2): Text: "أ) [The rest of the question text]".
-    - **NEVER** include the branch letter (أ, ب...) in the Level 1 question text.
-    - **SUBSTYLE**: 
-      - If a question/branch has children starting with (أ, ب, ج), set "subStyle" to "letters".
-      - If children start with (1, 2, 3), set "subStyle" to "numbers".
+    SUBSTYLE LOGIC:
+    - Set "subStyle" to "letters" for parents of (أ, ب, ج).
+    - Set "subStyle" to "numbers" for parents of (1, 2, 3).
     
     CRITICAL EXTRACTION LOGIC:
     - **GENERAL INSTRUCTIONS**: Text at the very top like "Answer all questions" or "Use clear handwriting" should set "requiredQuestionsCount" (if numeric) but NOT be a question.
