@@ -183,22 +183,13 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     3. For each main question, identify if it has branches (أ، ب، ج) or points (1، 2، 3).
     4. Ensure your JSON reflects this hierarchy using "subQuestions".
     
-    IRAQI EXAM FORMAT RULES (STRICT HIERARCHY):
-    - **ROOT QUESTIONS ARRAY**: This array MUST contain ONLY the main questions starting with "س" (e.g., س1, س2, س3, س4, س5, س6). 
-    - **TOTAL COUNT**: If the exam has 6 main questions (س1 to س6), the root "questions" array MUST have exactly 6 items.
-    - **LEVEL 2 (Branches - أ، ب، ج)**: These MUST ALWAYS be placed inside the "subQuestions" array of their parent "س" question. They ARE NOT allowed in the root array.
-    - **LEVEL 3 (Points - 1, 2, 3)**: These MUST be nested inside their respective Branch (Level 2).
-
-    MANDATORY LABEL HANDLING:
-    - **COMBINED "س1/أ"**: This is ONE Level 1 question. 
-      - The Level 1 object text should be the general instruction if exists (e.g., "أجب عن ما يلي"), or empty.
-      - The first entry in its "subQuestions" MUST be Branch "أ".
-    - **STRIPPING**: Remove "س1", "أ)", "1-" from the start of the 'text' field. Use the hierarchy to show the structure.
-    - **DO NOT FLATTEN**: Never turn a branch (أ) or a point (1) into a Level 1 question.
-    
-    SUBSTYLE LOGIC:
-    - Set "subStyle" to "letters" for parents of (أ، ب، ج).
-    - Set "subStyle" to "numbers" for parents of (1، 2، 3).
+    IRAQI EXAM FORMAT RULES:
+    - **HIERARCHY**: Level 1: "س1، س2..." | Level 2: "أ، ب..." (Branches) | Level 3: "1، 2..." (Points).
+    - **COMBINED LABELS**: If you see "س1/أ", split it: "س1" is the Parent, "أ" is the first child (subQuestion).
+    - **DISTINCTION**: 
+      - Use "subStyle: 'letters'" when children start with (أ، ب، ج).
+      - Use "subStyle: 'numbers'" when children start with (1، 2، 3).
+    - **STRICT COUNT**: Maintain exactly one Level 1 object for each "س" question found in the image.
     
     CRITICAL EXTRACTION LOGIC:
     - **GENERAL INSTRUCTIONS**: Text at the very top like "Answer all questions" or "Use clear handwriting" should set "requiredQuestionsCount" (if numeric) but NOT be a question.
