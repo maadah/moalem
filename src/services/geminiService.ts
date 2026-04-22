@@ -184,23 +184,21 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     4. Ensure your JSON reflects this hierarchy using "subQuestions".
     
     IRAQI EXAM FORMAT RULES (STRICT HIERARCHY):
-    - **LEVEL 1 (The Question Container)**: Starts with patterns like "س1", "س2", "س 3". These are the ONLY entries allowed in the top-level "questions" array.
-    - **LEVEL 2 (The Branch)**: Starts with "أ", "ب", "ج", etc. They MUST be nested inside the "subQuestions" of the preceding "س" question. 
-    - **LEVEL 3 (The Point/Item)**: Starts with "1-", "2-", "1)", "2)", etc. 
-      - If they follow a Branch (أ، ب)، they MUST be nested inside that branch's "subQuestions".
-      - If they follow a Level 1 Question (س) directly with no interim branches, they are Level 2 children of that "س".
+    - **ROOT QUESTIONS ARRAY**: This array MUST contain ONLY the main questions starting with "س" (e.g., س1, س2, س3, س4, س5, س6). 
+    - **TOTAL COUNT**: If the exam has 6 main questions (س1 to س6), the root "questions" array MUST have exactly 6 items.
+    - **LEVEL 2 (Branches - أ، ب، ج)**: These MUST ALWAYS be placed inside the "subQuestions" array of their parent "س" question. They ARE NOT allowed in the root array.
+    - **LEVEL 3 (Points - 1, 2, 3)**: These MUST be nested inside their respective Branch (Level 2).
 
-    LABEL DETECTION & STRIPPING PROTOCOL (MANDATORY):
-    - **PATTERN "س1/أ [Text]"**: Detect "س1" as Level 1 Label, "/أ" as Level 2 Label.
-    - **ACTION**: Strip these labels from the "text" field. 
-      - Level 1 Question text: "س1" (or the instruction following it).
-      - Level 2 Branch text: "[Text]".
-    - **PATTERN "1- [Text]"**: Detect "1-" as Level 3 Label. Strip it and set Level 3 Question text to "[Text]".
-    - **NEVER** include the label string (like "س1/أ" or "1-") inside the 'text' property of the JSON. Use the hierarchy to represent it.
-
+    MANDATORY LABEL HANDLING:
+    - **COMBINED "س1/أ"**: This is ONE Level 1 question. 
+      - The Level 1 object text should be the general instruction if exists (e.g., "أجب عن ما يلي"), or empty.
+      - The first entry in its "subQuestions" MUST be Branch "أ".
+    - **STRIPPING**: Remove "س1", "أ)", "1-" from the start of the 'text' field. Use the hierarchy to show the structure.
+    - **DO NOT FLATTEN**: Never turn a branch (أ) or a point (1) into a Level 1 question.
+    
     SUBSTYLE LOGIC:
-    - Set "subStyle" to "letters" if Level 2 candidates are (أ، ب، ج).
-    - Set "subStyle" to "numbers" if candidates are (1, 2, 3).
+    - Set "subStyle" to "letters" for parents of (أ، ب، ج).
+    - Set "subStyle" to "numbers" for parents of (1، 2، 3).
     
     CRITICAL EXTRACTION LOGIC:
     - **GENERAL INSTRUCTIONS**: Text at the very top like "Answer all questions" or "Use clear handwriting" should set "requiredQuestionsCount" (if numeric) but NOT be a question.
