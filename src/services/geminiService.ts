@@ -179,25 +179,27 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
       { text: prompt }
     ],
     config: {
-      systemInstruction: `You are a high-end Iraqi Exam Digitization Expert. Your mission is to deconstruct math papers with 100% hierarchy accuracy.
+      systemInstruction: `You are a high-end Iraqi Exam Digitization Expert. Your mission is to deconstruct math papers with 100% architectural accuracy.
+      
+      STRICT HIERARCHY (3 LEVELS):
+      1. Main Question (س1, س2, س3...): The container for a whole block of questions.
+      2. Branch (أ, ب, ج, د...): The specific section instruction (e.g., "أ/ جد ناتج ما يلي :").
+      3. Point (1, 2, 3...): The individual math tasks or multiple choice questions.
+      
+      MAPPING RULES:
+      - س1 is Level 1.
+      - أ/ is Level 2 (Nested inside س1).
+      - 1- is Level 3 (Nested inside أ/).
 
-      CRITICAL CLEANING RULES:
-      1. IGNORE general headers (School name, Grade) as questions.
-      2. STICKY HIERARCHY: Every Branch (أ, ب, ج..) MUST be nested inside the LAST mentioned Main Question (س1, س2..).
-         - Example: If you find 'س1/أ' then later 'ب/', the 'ب/' MUST be a subQuestion of 'س1'. 
-         - DO NOT create a new top-level object for 'ب/'. It is part of the previous 'س'.
-      3. QUESTION LEVEL (س1, س2..): The main grouping. It only changes when a new 'س' number is found.
-      4. BRANCH LEVEL (أ, ب, ج..): The instruction grouping under the current question.
-      5. POINT LEVEL (1-, 2-, 3-..): The actual tasks nested under the current Branch.
-         - CLEAN CONTENT: This level MUST ONLY contain the question text. No repeated labels like (أ/).
+      CRITICAL CONSTRAINTS:
+      - NO HALLUCINATIONS: Do not write "السؤال الأول" if the paper says "س1". Use the exact text from the paper.
+      - STICKY BRANCHES: If you see "ب/" and previously "س1", this "ب/" MUST be a subQuestion of "س1". Do not start a new Main Question object for branches.
+      - CLEAN POINTS: Points (Level 3) should only contain the actual problem (e.g., "5 + 5"). Do not include the branch label "أ/" inside point text.
+      - PRECISE GRADES: If a grade is written (e.g., ٢٠ درجة), put 20 in the 'grade' field. Do not invent grades like "00001".
+      - CONTEXT: If there's general text before questions (e.g., "أجب عن خمسة أسئلة"), put this in the 'title' field of the root object, not as a Question.
 
-      DECONSTRUCTION LOGIC:
-      - A Main Question (س1) is an umbrella. Everything until (س2) belongs to (س1).
-      - If 'ب/' has no 'س' before it, it belongs to the previous 'س'.
-      - Ensure 'جد ناتج ما يلي' is the branch instruction, and points (1, 2) are nested under it.
-
-      MATHEMATICAL PRECISION:
-      - Extract '٧٣٧٢٦٢١٠١ ≈' and '٦١٦٢٥٢٣٠٣٤' with all symbols exactly.`,
+      VISUAL VERIFICATION:
+      - Match the physical order. If (ب) comes after (أ), they should be siblings in the same Main Question's subQuestions array.`,
       responseMimeType: "application/json",
       responseSchema: {
         type: "OBJECT",
@@ -226,7 +228,21 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
                       text: { type: "STRING" },
                       answer: { type: "STRING" },
                       grade: { type: "NUMBER" },
-                      type: { type: "STRING" }
+                      type: { type: "STRING" },
+                      subQuestions: { // Added Level 3
+                        type: "ARRAY",
+                        items: {
+                          type: "OBJECT",
+                          required: ["id", "text", "type"],
+                          properties: {
+                            id: { type: "STRING" },
+                            text: { type: "STRING" },
+                            answer: { type: "STRING" },
+                            grade: { type: "NUMBER" },
+                            type: { type: "STRING" }
+                          }
+                        }
+                      }
                     }
                   }
                 }
