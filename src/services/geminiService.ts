@@ -183,19 +183,18 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
 
       CRITICAL CLEANING RULES:
       1. IGNORE general headers (School name, Grade) as questions.
-      2. QUESTION LEVEL (س1, س2..): The main grouping.
-      3. BRANCH LEVEL (أ, ب, ج..): The instruction grouping (e.g., "أ/ جد ناتج ما يلي :"). 
-         - IMPORTANT: The branch label and its instruction MUST stay together at this level.
-      4. POINT LEVEL (1-, 2-, 3-..): The actual tasks/math problems nested under the Branch.
-         - CLEAN CONTENT: This level MUST ONLY contain the question text. 
-         - DO NOT repeat the branch label (أ/) or the branch instruction (جد ناتج) inside these points.
-         - If point '1-' follows 'جد ناتج ما يلي', point '1-' must start directly with the first problem (e.g., '٥٩٣٨٠٨٧١٩ + ١٢٢٤٧٩٨٣٠').
+      2. STICKY HIERARCHY: Every Branch (أ, ب, ج..) MUST be nested inside the LAST mentioned Main Question (س1, س2..).
+         - Example: If you find 'س1/أ' then later 'ب/', the 'ب/' MUST be a subQuestion of 'س1'. 
+         - DO NOT create a new top-level object for 'ب/'. It is part of the previous 'س'.
+      3. QUESTION LEVEL (س1, س2..): The main grouping. It only changes when a new 'س' number is found.
+      4. BRANCH LEVEL (أ, ب, ج..): The instruction grouping under the current question.
+      5. POINT LEVEL (1-, 2-, 3-..): The actual tasks nested under the current Branch.
+         - CLEAN CONTENT: This level MUST ONLY contain the question text. No repeated labels like (أ/).
 
       DECONSTRUCTION LOGIC:
-      - Mentally separate 'Header' from 'Body'. 
-      - Header = "أ/ جد ناتج ما يلي".
-      - Body = Points [1, 2, 3...].
-      - Never put a point inside another point unless there is a physical sub-numbering (like a- inside 1-). If it's just 1, 2, 3, it's one flat level of subQuestions under the Branch.
+      - A Main Question (س1) is an umbrella. Everything until (س2) belongs to (س1).
+      - If 'ب/' has no 'س' before it, it belongs to the previous 'س'.
+      - Ensure 'جد ناتج ما يلي' is the branch instruction, and points (1, 2) are nested under it.
 
       MATHEMATICAL PRECISION:
       - Extract '٧٣٧٢٦٢١٠١ ≈' and '٦١٦٢٥٢٣٠٣٤' with all symbols exactly.`,
