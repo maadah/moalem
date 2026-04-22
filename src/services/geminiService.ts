@@ -185,12 +185,17 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     
     IRAQI EXAM FORMAT RULES:
     - **"س1، س2، س3..."**: Level 1 (Top Level).
-    - **"أ، ب، ج، د..."**: Level 2. These are ALWAYS branches of the preceding "س" question. They MUST be in its "subQuestions" array.
-    - **"1، 2، 3، 4..."**: Level 3 (if following أ، ب) or Level 2 (if following "س" directly). They MUST be nested inside their logical parent.
-    - **CRITICAL HIERARCHY**:
-      - If you see "س1" and then "أ)", "أ)" is a child of "س1".
-      - If you see "أ)" and then "1)", "1)" is a child of "أ)".
-      - Do NOT extract children as separate top-level questions.
+    - **"أ، ب، ج، د..."**: Level 2 (Branches). These MUST BE in the "subQuestions" array of the preceding "س" question.
+    - **"1، 2، 3، 4..."**: Level 3 (Points). If they follow a branch (أ، ب)، they MUST be nested inside that branch. If they follow "س" directly, they are Level 2.
+    
+    CRITICAL STRUCTURE RULES (Split Combined Labels):
+    - **MANDATORY SPLIT**: If you see combined labels like "س1/أ", "س1-أ", or "س1: أ", you MUST split them into TWO levels:
+      1. Parent (Level 1): Text: "س1".
+      2. Child (Level 2): Text: "أ) [The rest of the question text]".
+    - **NEVER** include the branch letter (أ, ب...) in the Level 1 question text.
+    - **SUBSTYLE**: 
+      - If a question/branch has children starting with (أ, ب, ج), set "subStyle" to "letters".
+      - If children start with (1, 2, 3), set "subStyle" to "numbers".
     
     CRITICAL EXTRACTION LOGIC:
     - **GENERAL INSTRUCTIONS**: Text at the very top like "Answer all questions" or "Use clear handwriting" should set "requiredQuestionsCount" (if numeric) but NOT be a question.
