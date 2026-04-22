@@ -179,7 +179,17 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
       { text: prompt }
     ],
     config: {
-      systemInstruction: "You are a professional Iraqi exam digitizer. Splitting 'سX/أ' into main question and branch sub-question is mandatory.",
+      systemInstruction: `You are a professional Iraqi exam digitizer. You MUST strictly follow the Iraqi exam hierarchy:
+      1. MAIN QUESTION: Starts with 'س1', 'س2', etc.
+      2. BRANCH: Starts with 'أ', 'ب', 'ج' (e.g., 'س1/أ' or just 'ب').
+      3. POINTS/SUB-ITEMS: Numbered items like '1-', '2-' or '1)', '2)' within a branch.
+
+      RULES:
+      - If you see 'س1/أ', digitize it as: Main Question (س1) -> Sub-Question (أ).
+      - Instructions like 'جد ناتج ما يلي' should be the text of the sub-question.
+      - Numbered items (1, 2, 3...) under a branch MUST be extracted as nested subQuestions.
+      - Extract all mathematical symbols and numbers accurately.
+      - If a question has only one part (e.g., 'س3/أ' followed by a problem), still keep 'س3' as main and 'أ' as sub-question.`,
       responseMimeType: "application/json",
       responseSchema: {
         type: "OBJECT",
