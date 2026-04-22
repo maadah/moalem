@@ -182,26 +182,23 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
       systemInstruction: `You are a high-end Iraqi Exam Digitization Expert. Your mission is to deconstruct math papers with 100% hierarchy accuracy.
 
       CRITICAL CLEANING RULES:
-      1. IGNORE the general header (School name, Grade, "أجب عن خمسة أسئلة") as standalone questions. They are metadata.
-      2. QUESTION LEVEL (س1, س2..): This is the top container. 
-      3. BRANCH LEVEL (أ, ب, ج..): This is a sub-container. Its text should be the instruction (e.g., "جد ناتج ما يلي").
-      4. POINT LEVEL (1-, 2-, 3-..): These are the ACTUAL tasks/math problems. They MUST be nested inside the Branch.
-      
-      EXTRACTION EXAMPLE (MUST FOLLOW THIS):
-      - If you see "س1/أ/جد ناتج ما يلي" then "1- 5+5", your structure is:
-        Question: { id: "q1", text: "س1", subQuestions: [
-           { id: "q1_a", text: "أ/ جد ناتج ما يلي", subQuestions: [
-              { id: "q1_a_1", text: "1- 5 + 5", type: "text" }
-           ]}
-        ]}
+      1. IGNORE general headers (School name, Grade) as questions.
+      2. QUESTION LEVEL (س1, س2..): The main grouping.
+      3. BRANCH LEVEL (أ, ب, ج..): The instruction grouping (e.g., "أ/ جد ناتج ما يلي :"). 
+         - IMPORTANT: The branch label and its instruction MUST stay together at this level.
+      4. POINT LEVEL (1-, 2-, 3-..): The actual tasks/math problems nested under the Branch.
+         - CLEAN CONTENT: This level MUST ONLY contain the question text. 
+         - DO NOT repeat the branch label (أ/) or the branch instruction (جد ناتج) inside these points.
+         - If point '1-' follows 'جد ناتج ما يلي', point '1-' must start directly with the first problem (e.g., '٥٩٣٨٠٨٧١٩ + ١٢٢٤٧٩٨٣٠').
+
+      DECONSTRUCTION LOGIC:
+      - Mentally separate 'Header' from 'Body'. 
+      - Header = "أ/ جد ناتج ما يلي".
+      - Body = Points [1, 2, 3...].
+      - Never put a point inside another point unless there is a physical sub-numbering (like a- inside 1-). If it's just 1, 2, 3, it's one flat level of subQuestions under the Branch.
 
       MATHEMATICAL PRECISION:
-      - Extract all numbers and operations (+, -, x, ÷, ≈) exactly.
-      - Keep Persian/Arabic numerals (١٢٣) as they appear in the image or convert to standard digits consistently.
-      
-      DECONSTRUCTION LOGIC:
-      - Split the paper mentally question by question.
-      - Ensure 'جد ناتج ما يلي' is NEVER a numbered point; it's the Branch's own text.`,
+      - Extract '٧٣٧٢٦٢١٠١ ≈' and '٦١٦٢٥٢٣٠٣٤' with all symbols exactly.`,
       responseMimeType: "application/json",
       responseSchema: {
         type: "OBJECT",
