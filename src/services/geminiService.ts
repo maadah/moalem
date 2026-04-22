@@ -173,29 +173,35 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
   }));
 
   const response = await retryWithBackoff(() => ai.models.generateContent({
-    model: "gemini-3-flash-preview",
+    model: "gemini-3.1-pro-preview", // Upgraded to Pro for complex hierarchy reasoning
     contents: [
       ...imageParts,
       { text: prompt }
     ],
     config: {
-      systemInstruction: `You are a professional Iraqi exam digitizer. You MUST organize the exam into a STRICT 3-LEVEL HIERARCHY:
+      systemInstruction: `You are a high-end Iraqi Exam Digitization Expert. Your mission is to deconstruct math papers with 100% hierarchy accuracy.
 
-      LEVEL 1 (Main Question): Starts with 'س1', 'س2', etc. 
-      - The 'text' for this level should be any general instruction found before the branches (e.g., 'أجب عن خمسة أسئلة فقط' or 'أكمل ما يلي').
+      CRITICAL CLEANING RULES:
+      1. IGNORE the general header (School name, Grade, "أجب عن خمسة أسئلة") as standalone questions. They are metadata.
+      2. QUESTION LEVEL (س1, س2..): This is the top container. 
+      3. BRANCH LEVEL (أ, ب, ج..): This is a sub-container. Its text should be the instruction (e.g., "جد ناتج ما يلي").
+      4. POINT LEVEL (1-, 2-, 3-..): These are the ACTUAL tasks/math problems. They MUST be nested inside the Branch.
+      
+      EXTRACTION EXAMPLE (MUST FOLLOW THIS):
+      - If you see "س1/أ/جد ناتج ما يلي" then "1- 5+5", your structure is:
+        Question: { id: "q1", text: "س1", subQuestions: [
+           { id: "q1_a", text: "أ/ جد ناتج ما يلي", subQuestions: [
+              { id: "q1_a_1", text: "1- 5 + 5", type: "text" }
+           ]}
+        ]}
 
-      LEVEL 2 (Branches): Starts with 'أ', 'ب', 'ج', 'د'.
-      - Each branch MUST be a subQuestion of the Main Question.
-      - The 'text' for the branch should be the instruction for that branch (e.g., 'جد ناتج ما يلي :' or 'أكمل الفراغات').
-
-      LEVEL 3 (Points): Numbered items like '1-', '2-', '3-' within a branch.
-      - These MUST be nested subQuestions INSIDE the Branch.
-      - DO NOT flatten this hierarchy. If a point has a math problem, the problem text is the 'text' of this level.
-
-      IMPORTANT RULES:
-      - If a branch has instructions but no numbered points (like س1/ب), put the instruction in the branch text.
-      - Never put 'جد ناتج ما يلي' as a numbered point (like 1-); it is always the Branch (LEVEL 2) header.
-      - Extract all mathematical symbols and numbers with 100% precision.`,
+      MATHEMATICAL PRECISION:
+      - Extract all numbers and operations (+, -, x, ÷, ≈) exactly.
+      - Keep Persian/Arabic numerals (١٢٣) as they appear in the image or convert to standard digits consistently.
+      
+      DECONSTRUCTION LOGIC:
+      - Split the paper mentally question by question.
+      - Ensure 'جد ناتج ما يلي' is NEVER a numbered point; it's the Branch's own text.`,
       responseMimeType: "application/json",
       responseSchema: {
         type: "OBJECT",
