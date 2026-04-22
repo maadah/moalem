@@ -24,17 +24,14 @@ export interface GradingResult {
 }
 
 const getApiKey = () => {
-  // 1. Check URL parameters (e.g., ?key=...)
   const urlParams = new URLSearchParams(window.location.search);
   const urlKey = urlParams.get('key');
   if (urlKey) {
     localStorage.setItem('GEMINI_API_KEY_AUTO', urlKey);
-    // Clean URL
     window.history.replaceState({}, document.title, window.location.pathname);
     return urlKey;
   }
 
-  // 2. Check Netlify/Environment Variable (Vite bakes these at build time)
   const envKey = import.meta.env.VITE_GEMINI_API_KEY || 
                  (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '') ||
                  (typeof process !== 'undefined' ? process.env.VITE_GEMINI_API_KEY : '');
@@ -43,7 +40,6 @@ const getApiKey = () => {
     return envKey;
   }
 
-  // 3. Check Local Storage
   return localStorage.getItem('GEMINI_API_KEY_AUTO') || '';
 };
 
@@ -79,18 +75,15 @@ async function retryWithBackoff<T>(
 function robustJsonParse(text: string): any {
   if (!text) return null;
   
-  // 1. Try direct parse
   try {
     return JSON.parse(text);
   } catch (e) {
     console.warn("Initial JSON parse failed, attempting cleaning...");
   }
 
-  // 2. Clean common markdown and control characters
   let cleaned = text.trim();
   cleaned = cleaned.replace(/^```json\s*/, '').replace(/\s*```$/, '');
   
-  // Handle unescaped newlines and control characters
   cleaned = cleaned.replace(/[\u0000-\u001F\u007F-\u009F]/g, (match) => {
     if (match === '\n') return '\\n';
     if (match === '\r') return '\\r';
@@ -98,14 +91,12 @@ function robustJsonParse(text: string): any {
     return '';
   });
 
-  // 3. Try parsing cleaned version
   try {
     return JSON.parse(cleaned);
   } catch (e) {
     console.warn("Cleaned JSON parse failed, attempting structural repair...");
   }
 
-  // 4. Structural repair for truncated JSON
   const stack: string[] = [];
   for (let i = 0; i < cleaned.length; i++) {
     if (cleaned[i] === '{') stack.push('}');
@@ -129,36 +120,10 @@ function robustJsonParse(text: string): any {
   try {
     return JSON.parse(cleaned);
   } catch (e) {
-    console.error("Structural repair failed. Last resort: partial extraction.");
+    console.error("Structural repair failed.");
   }
 
-  // 5. Last resort: partial extraction of the results array
-  try {
-    const resultsMatch = cleaned.match(/"results"\s*:\s*\[/);
-    if (resultsMatch) {
-      const startIndex = resultsMatch.index!;
-      let partial = "{" + cleaned.substring(startIndex);
-      
-      const pStack: string[] = [];
-      for (let i = 0; i < partial.length; i++) {
-        if (partial[i] === '{') pStack.push('}');
-        else if (partial[i] === '[') pStack.push(']');
-        else if (partial[i] === '}' || partial[i] === ']') {
-          if (pStack.length > 0 && pStack[pStack.length - 1] === partial[i]) {
-            pStack.pop();
-          }
-        }
-      }
-      while (pStack.length > 0) {
-        partial += pStack.pop();
-      }
-      return JSON.parse(partial);
-    }
-  } catch (e) {
-    console.error("Partial extraction failed.");
-  }
-
-  throw new Error("فشل في تحليل استجابة الذكاء الاصطناعي (JSON Parse Error). يرجى المحاولة مرة أخرى.");
+  return null;
 }
 
 export async function extractExamFromImages(base64Images: string[], apiKey: string): Promise<{ title: string, questions: Question[], requiredQuestionsCount?: number }> {
@@ -175,113 +140,21 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     Level 2 — BRANCH:          starts with  أ / ب / ج       (Arabic letters)
     Level 3 — POINT:           starts with  ١ / ٢ / ٣       (numbers)
 
-    A main question may contain:
-      - No sub-items at all         → it is a leaf, needs its own answer field
-      - Only branches (أ، ب، ج)    → branches are the leaves
-      - Only points (١، ٢، ٣)      → points are the leaves
-      - Both branches AND points    → points inside each branch are the leaves
-
-    LEAF = the deepest item in the tree → it needs an answer field.
     NON-LEAF parents (those that contain sub-items) do NOT get their own answer field.
 
     ============================================================
-    STEP 2 — HANDLE INLINE NOTATION  ← THIS IS THE KEY FIX
+    STEP 2 — HANDLE INLINE NOTATION
     ============================================================
-    Iraqi exams often write  "س١/أ"  or  "س١/ أ"  or  "س١ أ"  on the SAME LINE.
-    This does NOT mean there is one question called "س١/أ".
-    It means:
-      • "س١" is the MAIN QUESTION (Level 1) — its text is whatever comes before the branch label
-      • "أ" is the FIRST BRANCH (Level 2) — its text is whatever comes after the slash
-
-    PARSING RULE FOR INLINE NOTATION:
-    When you see a pattern like  "سX / Y"  or  "سX/Y"  where Y is a branch letter (أ,ب,ج) or point number:
-      1. Create a main question object for  سX.
-      2. Inside its subQuestions array, create a sub-question for  Y.
-      3. The text of the sub-question starts from Y's content, not from "سX/Y".
-
-    EXAMPLES of inline notation you must split correctly:
-      "س١/أجد ناتج ما يلي"  →  main question س١, branch أ with text "جد ناتج ما يلي"
-      "س٢/ أ/ اقرأ الأعداد"  →  main question س٢, branch أ with text "اقرأ الأعداد"
-      "س١/أ"  followed later by  "ب/"  on a new line  →  both أ and ب are branches of س١
-
-    ============================================================
-    STEP 3 — DETECT BRANCH / POINT SEPARATORS
-    ============================================================
-    Branches and points can appear in two ways:
-      A) INLINE with the parent:   "س١/أ نص الفرع"     (split as described above)
-      B) ON A NEW LINE:            "أ/" or "أ-" or "أ." or just "أ" at start of line
-
-    In BOTH cases, the branch/point must be nested inside the parent question as a subQuestion.
-
-    ============================================================
-    STEP 4 — requiredSubCount
-    ============================================================
-    If a question says "الاجابة عن اثنين فقط" or "فرعين فقط" or "خمسة فقط",
-    set requiredSubCount on that question/branch to the number mentioned.
-    The top-level instruction "الاجابة عن خمس اسئلة فقط" → set requiredQuestionsCount on the root.
-
-    ============================================================
-    STEP 5 — subStyle
-    ============================================================
-    Set "subStyle": "letters"  on a question whose direct children are branches (أ، ب، ج).
-    Set "subStyle": "numbers"  on a question whose direct children are numbered points (١، ٢، ٣).
-
-    ============================================================
-    STEP 6 — grade
-    ============================================================
-    Grades are usually printed in parentheses like (٢٠درجة) next to the question label.
-    Assign the grade to that question object. If no grade is visible, use 0.
-
-    ============================================================
-    STEP 7 — FULL EXAMPLE
-    ============================================================
-    Suppose the image contains:
-
-        س١/أجد ناتج ما يلي:          (٢٠درجة)
-            ٥٩٣٨٠٨٧١٩  +  ١٢٢٤٧٩٨٣٠
-            ٧٤٨٣٢٣٦١٦  -  ١٣٩٣٩٠١٧٧
-        ب/أكتب العدد بالصورة التحليلية ← ٤٢١٤٣٠٢
-
-    Correct JSON structure:
-    {
-      "id": "q1",
-      "text": "س١",
-      "grade": 20,
-      "type": "text",
-      "subStyle": "letters",
-      "subQuestions": [
-        {
-          "id": "q1a",
-          "text": "أ/ جد ناتج ما يلي:\n٥٩٣٨٠٨٧١٩ + ١٢٢٤٧٩٨٣٠\n٧٤٨٣٢٣٦١٦ - ١٣٩٣٩٠١٧٧",
-          "grade": 0,
-          "type": "text",
-          "answer": ""
-        },
-        {
-          "id": "q1b",
-          "text": "ب/ أكتب العدد بالصورة التحليلية ← ٤٢١٤٣٠٢",
-          "grade": 0,
-          "type": "text",
-          "answer": ""
-        }
-      ]
-    }
-
-    ============================================================
-    STEP 8 — ADDITIONAL RULES
-    ============================================================
-    - Scan the ENTIRE image top-to-bottom. Do not miss any question.
-    - Generate unique string IDs for every object (q1, q1a, q1b, q2, q2a, q2a1 …).
-    - type is always "text" unless you see true/false or multiple choice options.
-    - Extract math expressions, formulas, and numbers exactly as printed.
-    - Escape all double quotes inside JSON strings.
-    - Return ONLY valid JSON — no markdown fences, no explanation text.
+    When you see  "س١/أ"  or  "س١ أ"  on the SAME LINE:
+      • "س١" is the MAIN QUESTION (Level 1)
+      • "أ" is the FIRST BRANCH (Level 2)
+    You MUST split them into a nested hierarchy.
 
     OUTPUT FORMAT:
     {
-      "title": "Exam title extracted from the paper",
-      "requiredQuestionsCount": <number or omit if not specified>,
-      "questions": [ ... array of main question objects ... ]
+      "title": "Exam title",
+      "requiredQuestionsCount": <number>,
+      "questions": [ ... ]
     }
   `;
 
@@ -296,7 +169,6 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     };
   }));
 
-  // Define recursive schema for questions
   const questionSchema: any = {
     type: Type.OBJECT,
     required: ["id", "text", "type"],
@@ -306,7 +178,6 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
       answer: { type: Type.STRING },
       grade: { type: Type.NUMBER },
       type: { type: Type.STRING },
-      options: { type: Type.ARRAY, items: { type: Type.STRING } },
       subStyle: { type: Type.STRING },
       requiredSubCount: { type: Type.NUMBER },
       subQuestions: {
@@ -320,9 +191,6 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
             answer: { type: Type.STRING },
             grade: { type: Type.NUMBER },
             type: { type: Type.STRING },
-            options: { type: Type.ARRAY, items: { type: Type.STRING } },
-            subStyle: { type: Type.STRING },
-            requiredSubCount: { type: Type.NUMBER },
             subQuestions: {
               type: Type.ARRAY,
               items: {
@@ -344,15 +212,10 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
   };
 
   const response = await retryWithBackoff(() => ai.models.generateContent({
-    model: "gemini-flash-latest",
+    model: "gemini-1.5-flash",
     contents: { parts: [...imageParts, { text: prompt }] },
     config: {
-      systemInstruction: `You are a professional Arabic exam digitizer specializing in Iraqi school exams.
-Your MOST IMPORTANT rule: When you see "سX/أ" or "سX/ أ" on the same line, you MUST split it into:
-  - A main question for سX
-  - A branch subQuestion for أ (or whatever letter/number follows the slash)
-Never treat "سX/أ" as a single flat question. Always nest the branch inside the main question.
-Return only valid JSON with no markdown or extra text.`,
+      systemInstruction: "You are a professional Iraqi exam digitizer. Splitting 'سX/أ' into main question and branch sub-question is mandatory.",
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -360,16 +223,127 @@ Return only valid JSON with no markdown or extra text.`,
         properties: {
           title: { type: Type.STRING },
           requiredQuestionsCount: { type: Type.NUMBER },
-          questions: {
-            type: Type.ARRAY,
-            items: questionSchema
-          }
+          questions: { type: Type.ARRAY, items: questionSchema }
         }
       }
     }
   }));
 
-  return robustJsonParse(response.text || '');
+  let parsed = robustJsonParse(response.text || '');
+  if (parsed && Array.isArray(parsed.questions)) {
+    parsed.questions = parsed.questions.map(q => fixInlineSubQuestions(q));
+  }
+  return parsed || { title: "", questions: [] };
+}
+
+const ARABIC_BRANCH_LETTERS = ['أ', 'ب', 'ج', 'د', 'هـ', 'و', 'ز', 'ح', 'ط', 'ي'];
+const ARABIC_DIGITS_RE = /^[١٢٣٤٥٦٧٨٩٠1-9]/;
+
+function isLetterLabel(ch: string): boolean {
+  return ARABIC_BRANCH_LETTERS.some(l => ch.startsWith(l));
+}
+
+function makeId(base: string, suffix: string | number): string {
+  return `${base}_auto_${suffix}`;
+}
+
+function fixInlineSubQuestions(q: Question, parentId?: string): Question {
+  const id = q.id || makeId(parentId || 'q', Math.random().toString(36).slice(2, 6));
+
+  if (q.subQuestions && q.subQuestions.length > 0) {
+    return {
+      ...q,
+      id,
+      subQuestions: q.subQuestions.map((sq, i) => fixInlineSubQuestions(sq, `${id}_${i}`)),
+    };
+  }
+
+  const text = (q.text || '').trim();
+  const inlinePattern = /^(س\s*[١٢٣٤٥٦٧٨٩٠\d]*)\s*[\/\\]\s*([أبجدهوزحطي١٢٣٤٥٦٧٨٩٠1-9])([\s\S]*)$/u;
+  const inlineMatch = text.match(inlinePattern);
+
+  if (inlineMatch) {
+    const mainLabel = inlineMatch[1].trim();
+    const firstBranchChar = inlineMatch[2];
+    const remainder = inlineMatch[3];
+
+    const segments = splitIntoBranchSegments(firstBranchChar + remainder);
+
+    if (segments.length > 0) {
+      const subQuestions: Question[] = segments.map((seg, i) => ({
+        id: makeId(id, i),
+        text: seg.label + '/ ' + seg.body.trim(),
+        answer: '',
+        grade: 0,
+        type: q.type || 'text',
+      }));
+
+      const subStyle: 'letters' | 'numbers' = isLetterLabel(segments[0].label) ? 'letters' : 'numbers';
+
+      return {
+        ...q,
+        id,
+        text: mainLabel,
+        subQuestions,
+        subStyle,
+        answer: "" as any,
+      };
+    }
+  }
+
+  const multiLineSegments = splitIntoBranchSegments(text);
+  if (multiLineSegments.length >= 2) {
+    const subQuestions: Question[] = multiLineSegments.map((seg, i) => ({
+      id: makeId(id, i),
+      text: seg.label + '/ ' + seg.body.trim(),
+      answer: '',
+      grade: 0,
+      type: q.type || 'text',
+    }));
+
+    const subStyle: 'letters' | 'numbers' = isLetterLabel(multiLineSegments[0].label) ? 'letters' : 'numbers';
+    const firstIdx = text.indexOf(multiLineSegments[0].label);
+    const mainText = firstIdx > 0 ? text.slice(0, firstIdx).trim() : q.text;
+
+    return {
+      ...q,
+      id,
+      text: mainText || q.text,
+      subQuestions,
+      subStyle,
+      answer: "" as any,
+    };
+  }
+
+  return { ...q, id };
+}
+
+interface BranchSegment { label: string; body: string; }
+
+function splitIntoBranchSegments(text: string): BranchSegment[] {
+  const normalised = text.replace(/\r\n?/g, '\n');
+  const labelRe = /(?:^|\n|(?<=\/\s*))([أبجدهوزحطي١٢٣٤٥٦٧٨٩٠1-9])[\s\/\-\.]*/gu;
+
+  const matches: { label: string; index: number }[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = labelRe.exec(normalised)) !== null) {
+    matches.push({ label: m[1], index: m.index + (m[0].length - m[0].trimStart().length) });
+  }
+
+  if (matches.length < 1) return [];
+
+  const segments: BranchSegment[] = [];
+  for (let i = 0; i < matches.length; i++) {
+    const start = matches[i].index + matches[i].label.length;
+    let bodyStart = start;
+    if (normalised[bodyStart] && /[\s\/\-\.]/.test(normalised[bodyStart])) bodyStart++;
+
+    const end = i + 1 < matches.length ? matches[i + 1].index : normalised.length;
+    const body = normalised.slice(bodyStart, end).trim();
+    segments.push({ label: matches[i].label, body });
+  }
+
+  return segments;
 }
 
 async function compressImage(url: string, maxWidth = 2560, maxHeight = 2560, quality = 0.9): Promise<string> {
@@ -398,9 +372,7 @@ async function compressImage(url: string, maxWidth = 2560, maxHeight = 2560, qua
       const ctx = canvas.getContext('2d');
       if (!ctx) return reject('Could not get canvas context');
       ctx.drawImage(img, 0, 0, width, height);
-      
-      const base64 = canvas.toDataURL('image/jpeg', quality);
-      resolve(base64.split(',')[1]);
+      resolve(canvas.toDataURL('image/jpeg', quality).split(',')[1]);
     };
     img.onerror = reject;
   });
@@ -413,43 +385,16 @@ export async function gradeStudentPaper(
   requiredQuestionsCount: number,
   onProgress?: (current: number, total: number, phase: 'compressing' | 'grading') => void
 ): Promise<{ results: { studentName: string; gradings: GradingResult[]; totalGrade: number }[] }> {
-  const totalImages = imageUrls.length;
-  
-  if (onProgress) onProgress(0, totalImages, 'compressing');
-  
-  const compressionPromises = imageUrls.map(async (url, index) => {
-    try {
-      const compressed = await compressImage(url);
-      if (onProgress) onProgress(index + 1, totalImages, 'compressing');
-      return compressed;
-    } catch (e) {
-      console.error(`Error compressing image ${index}:`, e);
-      return null;
-    }
-  });
-
-  const compressedResults = await Promise.all(compressionPromises);
-  const base64Images = compressedResults.filter((img): img is string => img !== null);
-
-  if (base64Images.length === 0) {
-    throw new Error("فشل في معالجة الصور المرفوعة.");
-  }
+  if (onProgress) onProgress(0, imageUrls.length, 'compressing');
+  const base64Images = await Promise.all(imageUrls.map(async (url, idx) => {
+    const compressed = await compressImage(url);
+    if (onProgress) onProgress(idx + 1, imageUrls.length, 'compressing');
+    return compressed;
+  }));
 
   const apiKey = getApiKey();
-  if (!apiKey) {
-    throw new Error("مفتاح API مفقود. يرجى التأكد من إعداد GEMINI_API_KEY في متغيرات البيئة.");
-  }
-
+  if (!apiKey) throw new Error("API Key missing");
   const ai = new GoogleGenAI({ apiKey });
-  
-  const validQuestionIds = new Set<string>();
-  const collectIds = (qs: Question[]) => {
-    qs.forEach(q => {
-      validQuestionIds.add(q.id);
-      if (q.subQuestions) collectIds(q.subQuestions);
-    });
-  };
-  collectIds(questions);
 
   const flattenedQuestions: any[] = [];
   const leafQuestionIds = new Set<string>();
@@ -458,19 +403,11 @@ export async function gradeStudentPaper(
     qs.forEach((q, index) => {
       let label = q.text.split(/[:\-\.\/\(\)\[\]]/)[0].trim();
       if (label.length > 15 || label.length === 0) label = `Item ${index + 1}`;
-      
       const fullPath = path ? `${path} / ${label}` : label;
       const combinedText = parentText ? `${parentText} - ${q.text}` : q.text;
       
       if (!q.subQuestions || q.subQuestions.length === 0) {
-        flattenedQuestions.push({
-          id: q.id,
-          label: fullPath,
-          text: combinedText,
-          modelAnswer: q.answer,
-          maxGrade: q.grade,
-          type: q.type
-        });
+        flattenedQuestions.push({ id: q.id, label: fullPath, text: combinedText, modelAnswer: q.answer, maxGrade: q.grade, type: q.type });
         leafQuestionIds.add(q.id);
       } else {
         flatten(q.subQuestions, combinedText, fullPath);
@@ -478,9 +415,6 @@ export async function gradeStudentPaper(
     });
   };
   flatten(questions);
-
-  const BATCH_SIZE = 10; 
-  const allResults: any[] = [];
 
   const gradingSchema = {
     type: Type.OBJECT,
@@ -500,15 +434,8 @@ export async function gradeStudentPaper(
                   studentAnswer: { type: Type.STRING },
                   grade: { type: Type.NUMBER },
                   feedback: { type: Type.STRING },
-                  box: { 
-                    type: Type.ARRAY, 
-                    items: { type: Type.NUMBER },
-                    description: "Bounding box [ymin, xmin, ymax, xmax] of the student's answer on the page, normalized to 1000."
-                  },
-                  pageIndex: { 
-                    type: Type.NUMBER,
-                    description: "0-based index of the image/page within the provided batch where this answer was found."
-                  }
+                  box: { type: Type.ARRAY, items: { type: Type.NUMBER } },
+                  pageIndex: { type: Type.NUMBER }
                 }
               }
             },
@@ -519,145 +446,23 @@ export async function gradeStudentPaper(
     }
   };
 
-  const totalBatches = Math.ceil(base64Images.length / BATCH_SIZE);
+  const prompt = `Grade student handwritten papers.
+    Questions: ${JSON.stringify(flattenedQuestions)}
+    Total Grade: ${totalExamGrade}
+    Required: ${requiredQuestionsCount}
+    Use IDs exactly. Feedback in Arabic.`;
 
-  for (let i = 0; i < base64Images.length; i += BATCH_SIZE) {
-    const currentBatchIndex = Math.floor(i / BATCH_SIZE) + 1;
-    if (onProgress) onProgress(currentBatchIndex, totalBatches, 'grading');
-    
-    const batch = base64Images.slice(i, i + BATCH_SIZE);
-    
-    const prompt = `
-      You are an expert teacher grading student handwritten exam papers. Your goal is to be EXTREMELY CONSISTENT and FAIR.
-      
-      EXAM QUESTIONS AND MODEL ANSWERS (Use these IDs exactly):
-      ${JSON.stringify(flattenedQuestions, null, 2)}
-      
-      TOTAL EXAM GRADE: ${totalExamGrade}
-      REQUIRED QUESTIONS COUNT: ${requiredQuestionsCount}
-      
-      GRADING PHILOSOPHY:
-      - **Consistency**: The same answer must ALWAYS receive the same grade.
-      - **Accuracy**: Compare the student's answer carefully with the model answer.
-      - **Partial Credit**: If an answer is partially correct, award partial points based on the completeness and correctness of the key points.
-      - **Handwriting**: Be patient with handwriting, but if it's completely illegible, award 0.
-      
-      INSTRUCTIONS:
-      1. Analyze the provided images (Batch ${currentBatchIndex} of ${totalBatches}).
-      2. **STRICT QUESTION MAPPING**: You MUST ONLY grade the questions listed in the "EXAM QUESTIONS" section above. 
-      3. **MATCH IDs**: You MUST use the exact "id" from the list provided above for each grading result.
-      4. **HIERARCHY HANDLING**: 
-         - The "label" field (e.g., "س2 / أ") tells you which question and branch it is.
-         - If a student writes "س2" followed by "أ", map the answer for "أ" to the ID associated with label "س2 / أ".
-      5. **DO NOT HALLUCINATE**: Only use IDs from the provided list.
-      6. **STUDENT ANSWER EXTRACTION**: Extract the FULL text of the student's handwritten answer verbatim.
-      7. **ARABIC FEEDBACK ONLY**: Provide all feedback and student names in Arabic.
-      8. **CONCISE FEEDBACK**: Provide short, constructive feedback (max 15 words). Explain WHY the grade was given if it's not a full mark.
-      9. Calculate the total grade for the student.
-      10. **VISUAL MARKING**: For each answer, detect its bounding box [ymin, xmin, ymax, xmax] and the image index where it appeared (0 to ${batch.length - 1}).
-      11. **DETERMINISM**: Be objective. Do not let external factors influence the grade.
-    `;
-
-    const imageParts = batch.map((base64) => ({
-      inlineData: {
-        data: base64,
-        mimeType: "image/jpeg",
-      },
-    }));
-
-    try {
-      const result = await retryWithBackoff(() => ai.models.generateContent({
-        model: "gemini-flash-latest", 
-        contents: [{ role: "user", parts: [...imageParts, { text: prompt }] }],
-        config: {
-          systemInstruction: "You are a professional Arabic teacher. Your grading must be 100% consistent, objective, and fair. Always provide feedback in Arabic. Strictly follow the provided question IDs.",
-          responseMimeType: "application/json",
-          responseSchema: gradingSchema,
-          temperature: 0.1,
-          topP: 0.1,
-          topK: 1
-        },
-      }));
-
-      const parsed = robustJsonParse(result.text || '');
-      
-      if (parsed && parsed.results && Array.isArray(parsed.results)) {
-        const filteredResults = parsed.results.map((student: any) => {
-          const gradings = student.gradings || [];
-          const uniqueGradings: any[] = [];
-          const seenIds = new Set<string>();
-
-          gradings.forEach((g: any) => {
-            if (leafQuestionIds.has(g.questionId) && !seenIds.has(g.questionId)) {
-              if (g.pageIndex !== undefined) {
-                g.pageIndex = i + g.pageIndex;
-              }
-              
-              const qInfo = flattenedQuestions.find(fq => fq.id === g.questionId);
-              if (qInfo) {
-                g.maxGrade = qInfo.maxGrade;
-                g.label = qInfo.label;
-              }
-              
-              uniqueGradings.push(g);
-              seenIds.add(g.questionId);
-            }
-          });
-
-          return {
-            ...student,
-            gradings: uniqueGradings
-          };
-        }).filter((student: any) => student.gradings.length > 0);
-        
-        allResults.push(...filteredResults);
-      }
-    } catch (e: any) {
-      console.error(`Error in grading batch ${i}:`, e);
-      if (e.message?.includes('429') || e.message?.includes('quota')) {
-        throw new Error("تم تجاوز حصة استخدام API (Quota Exceeded). يرجى المحاولة لاحقاً.");
-      }
-      if (allResults.length > 0) {
-        console.warn("Returning partial results due to error in batch.");
-        break; 
-      }
-      throw new Error(`خطأ في معالجة الصور: ${e.message || 'خطأ غير معروف'}`);
+  const response = await retryWithBackoff(() => ai.models.generateContent({
+    model: "gemini-1.5-flash",
+    contents: [{ role: "user", parts: [...base64Images.map(data => ({ inlineData: { data, mimeType: "image/jpeg" } })), { text: prompt }] }],
+    config: {
+      systemInstruction: "You are a professional Arabic teacher. Grading must be consistent and fair. Use only provided IDs.",
+      responseMimeType: "application/json",
+      responseSchema: gradingSchema,
+      temperature: 0.1
     }
-  }
+  }));
 
-  // Merge results by student name
-  const mergedMap = new Map<string, any>();
-  
-  const normalizeName = (name: string) => {
-    return name
-      .trim()
-      .replace(/[أإآ]/g, 'ا')
-      .replace(/ة/g, 'ه')
-      .replace(/ى/g, 'ي')
-      .replace(/\s+/g, ' ');
-  };
-
-  allResults.forEach(res => {
-    const normName = normalizeName(res.studentName);
-    if (mergedMap.has(normName)) {
-      const existing = mergedMap.get(normName);
-      
-      res.gradings.forEach((newG: any) => {
-        const existingIdx = existing.gradings.findIndex((eg: any) => eg.questionId === newG.questionId);
-        if (existingIdx > -1) {
-          if ((newG.grade || 0) > (existing.gradings[existingIdx].grade || 0)) {
-            existing.gradings[existingIdx] = newG;
-          }
-        } else {
-          existing.gradings.push(newG);
-        }
-      });
-      
-      existing.totalGrade = existing.gradings.reduce((sum: number, g: any) => sum + (g.grade || 0), 0);
-    } else {
-      mergedMap.set(normName, { ...res, gradings: [...res.gradings] });
-    }
-  });
-
-  return { results: Array.from(mergedMap.values()) };
+  const parsed = robustJsonParse(response.text || '');
+  return { results: parsed?.results || [] };
 }
