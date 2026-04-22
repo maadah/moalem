@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 
 export interface Question {
   id: string;
@@ -169,64 +169,49 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     };
   }));
 
-  const questionSchema: any = {
-    type: Type.OBJECT,
-    required: ["id", "text", "type"],
-    properties: {
-      id: { type: Type.STRING },
-      text: { type: Type.STRING },
-      answer: { type: Type.STRING },
-      grade: { type: Type.NUMBER },
-      type: { type: Type.STRING },
-      subStyle: { type: Type.STRING },
-      requiredSubCount: { type: Type.NUMBER },
-      subQuestions: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          required: ["id", "text", "type"],
-          properties: {
-            id: { type: Type.STRING },
-            text: { type: Type.STRING },
-            answer: { type: Type.STRING },
-            grade: { type: Type.NUMBER },
-            type: { type: Type.STRING },
-            subQuestions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                required: ["id", "text", "type"],
-                properties: {
-                  id: { type: Type.STRING },
-                  text: { type: Type.STRING },
-                  answer: { type: Type.STRING },
-                  grade: { type: Type.NUMBER },
-                  type: { type: Type.STRING }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  };
-
   const response = await retryWithBackoff(() => ai.models.generateContent({
     model: "gemini-1.5-flash",
-    contents: [{ 
-      role: 'user', 
-      parts: [...imageParts, { text: prompt }] 
-    }],
+    contents: [
+      ...imageParts,
+      { text: prompt }
+    ],
     config: {
       systemInstruction: "You are a professional Iraqi exam digitizer. Splitting 'سX/أ' into main question and branch sub-question is mandatory.",
       responseMimeType: "application/json",
       responseSchema: {
-        type: Type.OBJECT,
+        type: "OBJECT",
         required: ["questions"],
         properties: {
-          title: { type: Type.STRING },
-          requiredQuestionsCount: { type: Type.NUMBER },
-          questions: { type: Type.ARRAY, items: questionSchema }
+          title: { type: "STRING" },
+          requiredQuestionsCount: { type: "NUMBER" },
+          questions: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              required: ["id", "text", "type"],
+              properties: {
+                id: { type: "STRING" },
+                text: { type: "STRING" },
+                answer: { type: "STRING" },
+                grade: { type: "NUMBER" },
+                type: { type: "STRING" },
+                subQuestions: {
+                  type: "ARRAY",
+                  items: {
+                    type: "OBJECT",
+                    required: ["id", "text", "type"],
+                    properties: {
+                      id: { type: "STRING" },
+                      text: { type: "STRING" },
+                      answer: { type: "STRING" },
+                      grade: { type: "NUMBER" },
+                      type: { type: "STRING" }
+                    }
+                  }
+                }
+              }
+            }
+          }
         }
       }
     }
@@ -235,7 +220,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
   const text = response.text || '';
   let parsed = robustJsonParse(text);
   if (parsed && Array.isArray(parsed.questions)) {
-    parsed.questions = parsed.questions.map(q => fixInlineSubQuestions(q));
+    parsed.questions = parsed.questions.map((q: any) => fixInlineSubQuestions(q));
   }
   return parsed || { title: "", questions: [] };
 }
@@ -420,36 +405,6 @@ export async function gradeStudentPaper(
   };
   flatten(questions);
 
-  const gradingSchema = {
-    type: Type.OBJECT,
-    properties: {
-      results: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            studentName: { type: Type.STRING },
-            gradings: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  questionId: { type: Type.STRING },
-                  studentAnswer: { type: Type.STRING },
-                  grade: { type: Type.NUMBER },
-                  feedback: { type: Type.STRING },
-                  box: { type: Type.ARRAY, items: { type: Type.NUMBER } },
-                  pageIndex: { type: Type.NUMBER }
-                }
-              }
-            },
-            totalGrade: { type: Type.NUMBER }
-          }
-        }
-      }
-    }
-  };
-
   const prompt = `Grade student handwritten papers.
     Questions: ${JSON.stringify(flattenedQuestions)}
     Total Grade: ${totalExamGrade}
@@ -458,14 +413,42 @@ export async function gradeStudentPaper(
 
   const response = await retryWithBackoff(() => ai.models.generateContent({
     model: "gemini-1.5-flash",
-    contents: [{ 
-      role: "user", 
-      parts: [...base64Images.map(data => ({ inlineData: { data, mimeType: "image/jpeg" } })), { text: prompt }] 
-    }],
+    contents: [
+      ...base64Images.map(data => ({ inlineData: { data, mimeType: "image/jpeg" } })),
+      { text: prompt }
+    ],
     config: {
       systemInstruction: "You are a professional Arabic teacher. Grading must be consistent and fair. Use only provided IDs.",
       responseMimeType: "application/json",
-      responseSchema: gradingSchema,
+      responseSchema: {
+        type: "OBJECT",
+        properties: {
+          results: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                studentName: { type: "STRING" },
+                gradings: {
+                  type: "ARRAY",
+                  items: {
+                    type: "OBJECT",
+                    properties: {
+                      questionId: { type: "STRING" },
+                      studentAnswer: { type: "STRING" },
+                      grade: { type: "NUMBER" },
+                      feedback: { type: "STRING" },
+                      box: { type: "ARRAY", items: { type: "NUMBER" } },
+                      pageIndex: { type: "NUMBER" }
+                    }
+                  }
+                },
+                totalGrade: { type: "NUMBER" }
+              }
+            }
+          }
+        }
+      },
       temperature: 0.1
     }
   }));
