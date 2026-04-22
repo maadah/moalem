@@ -213,7 +213,10 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
 
   const response = await retryWithBackoff(() => ai.models.generateContent({
     model: "gemini-1.5-flash",
-    contents: { parts: [...imageParts, { text: prompt }] },
+    contents: [{ 
+      role: 'user', 
+      parts: [...imageParts, { text: prompt }] 
+    }],
     config: {
       systemInstruction: "You are a professional Iraqi exam digitizer. Splitting 'سX/أ' into main question and branch sub-question is mandatory.",
       responseMimeType: "application/json",
@@ -229,7 +232,8 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     }
   }));
 
-  let parsed = robustJsonParse(response.text || '');
+  const text = response.text || '';
+  let parsed = robustJsonParse(text);
   if (parsed && Array.isArray(parsed.questions)) {
     parsed.questions = parsed.questions.map(q => fixInlineSubQuestions(q));
   }
@@ -454,7 +458,10 @@ export async function gradeStudentPaper(
 
   const response = await retryWithBackoff(() => ai.models.generateContent({
     model: "gemini-1.5-flash",
-    contents: [{ role: "user", parts: [...base64Images.map(data => ({ inlineData: { data, mimeType: "image/jpeg" } })), { text: prompt }] }],
+    contents: [{ 
+      role: "user", 
+      parts: [...base64Images.map(data => ({ inlineData: { data, mimeType: "image/jpeg" } })), { text: prompt }] 
+    }],
     config: {
       systemInstruction: "You are a professional Arabic teacher. Grading must be consistent and fair. Use only provided IDs.",
       responseMimeType: "application/json",
@@ -463,6 +470,7 @@ export async function gradeStudentPaper(
     }
   }));
 
-  const parsed = robustJsonParse(response.text || '');
+  const text = response.text || '';
+  const parsed = robustJsonParse(text);
   return { results: parsed?.results || [] };
 }
