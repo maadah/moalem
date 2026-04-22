@@ -127,7 +127,8 @@ function robustJsonParse(text: string): any {
 }
 
 export async function extractExamFromImages(base64Images: string[], apiKey: string): Promise<{ title: string, questions: Question[], requiredQuestionsCount?: number }> {
-  const ai = new GoogleGenAI({ apiKey });
+  // Explicitly set apiVersion to ensure model compatibility (gemini-1.5-flash is stable on v1)
+  const ai = new GoogleGenAI({ apiKey, apiVersion: 'v1' });
   const prompt = `
     You are an expert at reading Arabic Iraqi school exam papers. Analyze the provided image(s) and extract ALL questions into a structured JSON.
 
@@ -383,7 +384,7 @@ export async function gradeStudentPaper(
 
   const apiKey = getApiKey();
   if (!apiKey) throw new Error("API Key missing");
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = new GoogleGenAI({ apiKey, apiVersion: 'v1' });
 
   const flattenedQuestions: any[] = [];
   const leafQuestionIds = new Set<string>();
