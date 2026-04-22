@@ -185,11 +185,11 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
       3. POINTS/SUB-ITEMS: Numbered items like '1-', '2-' or '1)', '2)' within a branch.
 
       RULES:
-      - If you see 'س1/أ', digitize it as: Main Question (س1) -> Sub-Question (أ).
-      - Instructions like 'جد ناتج ما يلي' should be the text of the sub-question.
-      - Numbered items (1, 2, 3...) under a branch MUST be extracted as nested subQuestions.
-      - Extract all mathematical symbols and numbers accurately.
-      - If a question has only one part (e.g., 'س3/أ' followed by a problem), still keep 'س3' as main and 'أ' as sub-question.`,
+      - If you see 'س1/أ/جد ناتج ما يلي :', digitize it as: Main Question (س1) -> Sub-Question (أ) with text "جد ناتج ما يلي :".
+      - DO NOT make 'جد ناتج ما يلي' a numbered point. It is the header of the branch.
+      - Any numbered list (1-, 2-, 3-) following a branch instruction MUST be nested AS subQuestions of that branch.
+      - For math problems, extract the full equation (e.g., '٥٩٣٨٠٨٧١٩ + ١٢٢٤٧٩٨٣٠') exactly as the question text.
+      - Ensure 'س1' remains as the title of the main question container.`,
       responseMimeType: "application/json",
       responseSchema: {
         type: "OBJECT",
