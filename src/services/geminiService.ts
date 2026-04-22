@@ -35,7 +35,6 @@ const getApiKey = () => {
   }
 
   // 2. Check Netlify/Environment Variable (Vite bakes these at build time)
-  // Check both import.meta.env and process.env for maximum compatibility
   const envKey = import.meta.env.VITE_GEMINI_API_KEY || 
                  (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '') ||
                  (typeof process !== 'undefined' ? process.env.VITE_GEMINI_API_KEY : '');
@@ -107,20 +106,6 @@ function robustJsonParse(text: string): any {
   }
 
   // 4. Structural repair for truncated JSON
-  // Balance braces and brackets
-  let openBraces = (cleaned.match(/\{/g) || []).length;
-  let closeBraces = (cleaned.match(/\}/g) || []).length;
-  let openBrackets = (cleaned.match(/\[/g) || []).length;
-  let closeBrackets = (cleaned.match(/\]/g) || []).length;
-
-  // If it's cut off inside a string, close the string first
-  const quoteMatches = cleaned.match(/"/g);
-  if (quoteMatches && quoteMatches.length % 2 !== 0) {
-    cleaned += '"';
-  }
-
-  // Close open structures in reverse order
-  // We'll use a stack-based approach for better accuracy
   const stack: string[] = [];
   for (let i = 0; i < cleaned.length; i++) {
     if (cleaned[i] === '{') stack.push('}');
@@ -132,6 +117,11 @@ function robustJsonParse(text: string): any {
     }
   }
   
+  const quoteMatches = cleaned.match(/"/g);
+  if (quoteMatches && quoteMatches.length % 2 !== 0) {
+    cleaned += '"';
+  }
+
   while (stack.length > 0) {
     cleaned += stack.pop();
   }
@@ -149,7 +139,6 @@ function robustJsonParse(text: string): any {
       const startIndex = resultsMatch.index!;
       let partial = "{" + cleaned.substring(startIndex);
       
-      // Balance this partial string
       const pStack: string[] = [];
       for (let i = 0; i < partial.length; i++) {
         if (partial[i] === '{') pStack.push('}');
@@ -175,58 +164,128 @@ function robustJsonParse(text: string): any {
 export async function extractExamFromImages(base64Images: string[], apiKey: string): Promise<{ title: string, questions: Question[], requiredQuestionsCount?: number }> {
   const ai = new GoogleGenAI({ apiKey });
   const prompt = `
-    Analyze the provided images of an exam paper and extract EVERY SINGLE question, branch, and point into a structured JSON format.
-    
-    THINKING STEP:
-    1. Identify general exam instructions (e.g., "Answer 5 questions only").
-    2. Mentally list all the main questions (e.g., س1, س2, س3, س4, س5, س6).
-    3. For each main question, identify if it has branches (أ، ب، ج) or points (1، 2، 3).
-    4. Ensure your JSON reflects this hierarchy using "subQuestions".
-    
-    IRAQI EXAM FORMAT RULES:
-    - **HIERARCHY**: Level 1: "س1، س2..." | Level 2: "أ، ب..." (Branches) | Level 3: "1، 2..." (Points).
-    - **COMBINED LABELS**: If you see "س1/أ", split it: "س1" is the Parent, "أ" is the first child (subQuestion).
-    - **DISTINCTION**: 
-      - Use "subStyle: 'letters'" when children start with (أ، ب، ج).
-      - Use "subStyle: 'numbers'" when children start with (1، 2، 3).
-    - **STRICT COUNT**: Maintain exactly one Level 1 object for each "س" question found in the image.
-    
-    CRITICAL EXTRACTION LOGIC:
-    - **GENERAL INSTRUCTIONS**: Text at the very top like "Answer all questions" or "Use clear handwriting" should set "requiredQuestionsCount" (if numeric) but NOT be a question.
-    - **CHOICE WORDS**: words like "خمسة فقط" (5 only), "اثنين فقط" (2 only), "فرعين فقط" (2 branches only) indicate a requirement. Use them to set "requiredSubCount" for that specific question or branch.
-    - **LEAF NODES**: The smallest items (lowest in hierarchy) are the ones that actually require an answer.
-    - **FORMULAS**: Extract formulas exactly (e.g., NaCl, H2O).
-    
-    EXTRACTION RULES:
-    - Extract "text", "grade", and "type" (usually "text" for these descriptive questions).
-    - Generate unique string IDs for everything.
-    - **MANDATORY**: You MUST scan the entire image from top-to-bottom and side-to-side. Do not stop early.
-    - **JSON SAFETY**: Escape all double quotes inside strings.
-    
-    OUTPUT FORMAT (JSON ONLY):
+    You are an expert at reading Arabic Iraqi school exam papers. Analyze the provided image(s) and extract ALL questions into a structured JSON.
+
+    ============================================================
+    STEP 1 — UNDERSTAND THE IRAQI EXAM HIERARCHY
+    ============================================================
+    Iraqi exams follow this 3-level hierarchy:
+
+    Level 1 — MAIN QUESTION:   starts with  س١ / س٢ / س٣  (or س1, س2, س3)
+    Level 2 — BRANCH:          starts with  أ / ب / ج       (Arabic letters)
+    Level 3 — POINT:           starts with  ١ / ٢ / ٣       (numbers)
+
+    A main question may contain:
+      - No sub-items at all         → it is a leaf, needs its own answer field
+      - Only branches (أ، ب، ج)    → branches are the leaves
+      - Only points (١، ٢، ٣)      → points are the leaves
+      - Both branches AND points    → points inside each branch are the leaves
+
+    LEAF = the deepest item in the tree → it needs an answer field.
+    NON-LEAF parents (those that contain sub-items) do NOT get their own answer field.
+
+    ============================================================
+    STEP 2 — HANDLE INLINE NOTATION  ← THIS IS THE KEY FIX
+    ============================================================
+    Iraqi exams often write  "س١/أ"  or  "س١/ أ"  or  "س١ أ"  on the SAME LINE.
+    This does NOT mean there is one question called "س١/أ".
+    It means:
+      • "س١" is the MAIN QUESTION (Level 1) — its text is whatever comes before the branch label
+      • "أ" is the FIRST BRANCH (Level 2) — its text is whatever comes after the slash
+
+    PARSING RULE FOR INLINE NOTATION:
+    When you see a pattern like  "سX / Y"  or  "سX/Y"  where Y is a branch letter (أ,ب,ج) or point number:
+      1. Create a main question object for  سX.
+      2. Inside its subQuestions array, create a sub-question for  Y.
+      3. The text of the sub-question starts from Y's content, not from "سX/Y".
+
+    EXAMPLES of inline notation you must split correctly:
+      "س١/أجد ناتج ما يلي"  →  main question س١, branch أ with text "جد ناتج ما يلي"
+      "س٢/ أ/ اقرأ الأعداد"  →  main question س٢, branch أ with text "اقرأ الأعداد"
+      "س١/أ"  followed later by  "ب/"  on a new line  →  both أ and ب are branches of س١
+
+    ============================================================
+    STEP 3 — DETECT BRANCH / POINT SEPARATORS
+    ============================================================
+    Branches and points can appear in two ways:
+      A) INLINE with the parent:   "س١/أ نص الفرع"     (split as described above)
+      B) ON A NEW LINE:            "أ/" or "أ-" or "أ." or just "أ" at start of line
+
+    In BOTH cases, the branch/point must be nested inside the parent question as a subQuestion.
+
+    ============================================================
+    STEP 4 — requiredSubCount
+    ============================================================
+    If a question says "الاجابة عن اثنين فقط" or "فرعين فقط" or "خمسة فقط",
+    set requiredSubCount on that question/branch to the number mentioned.
+    The top-level instruction "الاجابة عن خمس اسئلة فقط" → set requiredQuestionsCount on the root.
+
+    ============================================================
+    STEP 5 — subStyle
+    ============================================================
+    Set "subStyle": "letters"  on a question whose direct children are branches (أ، ب، ج).
+    Set "subStyle": "numbers"  on a question whose direct children are numbered points (١، ٢، ٣).
+
+    ============================================================
+    STEP 6 — grade
+    ============================================================
+    Grades are usually printed in parentheses like (٢٠درجة) next to the question label.
+    Assign the grade to that question object. If no grade is visible, use 0.
+
+    ============================================================
+    STEP 7 — FULL EXAMPLE
+    ============================================================
+    Suppose the image contains:
+
+        س١/أجد ناتج ما يلي:          (٢٠درجة)
+            ٥٩٣٨٠٨٧١٩  +  ١٢٢٤٧٩٨٣٠
+            ٧٤٨٣٢٣٦١٦  -  ١٣٩٣٩٠١٧٧
+        ب/أكتب العدد بالصورة التحليلية ← ٤٢١٤٣٠٢
+
+    Correct JSON structure:
     {
-      "title": "Exam Title",
-      "requiredQuestionsCount": number (optional),
-      "questions": [
+      "id": "q1",
+      "text": "س١",
+      "grade": 20,
+      "type": "text",
+      "subStyle": "letters",
+      "subQuestions": [
         {
-          "id": "unique_id",
-          "text": "Question text",
-          "grade": number,
-          "type": "text|true-false|multiple-choice|fill-in-the-blanks",
-          "subQuestions": [ 
-            {
-              "id": "sub_id",
-              "text": "Sub-question text",
-              "subQuestions": [ ... even deeper points if exist ... ]
-            }
-          ]
+          "id": "q1a",
+          "text": "أ/ جد ناتج ما يلي:\n٥٩٣٨٠٨٧١٩ + ١٢٢٤٧٩٨٣٠\n٧٤٨٣٢٣٦١٦ - ١٣٩٣٩٠١٧٧",
+          "grade": 0,
+          "type": "text",
+          "answer": ""
+        },
+        {
+          "id": "q1b",
+          "text": "ب/ أكتب العدد بالصورة التحليلية ← ٤٢١٤٣٠٢",
+          "grade": 0,
+          "type": "text",
+          "answer": ""
         }
       ]
+    }
+
+    ============================================================
+    STEP 8 — ADDITIONAL RULES
+    ============================================================
+    - Scan the ENTIRE image top-to-bottom. Do not miss any question.
+    - Generate unique string IDs for every object (q1, q1a, q1b, q2, q2a, q2a1 …).
+    - type is always "text" unless you see true/false or multiple choice options.
+    - Extract math expressions, formulas, and numbers exactly as printed.
+    - Escape all double quotes inside JSON strings.
+    - Return ONLY valid JSON — no markdown fences, no explanation text.
+
+    OUTPUT FORMAT:
+    {
+      "title": "Exam title extracted from the paper",
+      "requiredQuestionsCount": <number or omit if not specified>,
+      "questions": [ ... array of main question objects ... ]
     }
   `;
 
   const imageParts = await Promise.all(base64Images.map(async (base64) => {
-    // Ensure we have a data URL for compressImage
     const dataUrl = base64.startsWith('data:') ? base64 : `data:image/jpeg;base64,${base64}`;
     const compressedData = await compressImage(dataUrl);
     return {
@@ -237,7 +296,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     };
   }));
 
-  // Define recursive schema for questions - simplified to reduce token overhead
+  // Define recursive schema for questions
   const questionSchema: any = {
     type: Type.OBJECT,
     required: ["id", "text", "type"],
@@ -285,10 +344,15 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
   };
 
   const response = await retryWithBackoff(() => ai.models.generateContent({
-    model: "gemini-flash-latest", // Use stable Flash model
+    model: "gemini-flash-latest",
     contents: { parts: [...imageParts, { text: prompt }] },
     config: {
-      systemInstruction: "You are a professional exam digitizer. Extract ALL questions into a precise JSON structure. Be concise to avoid long responses. Use \\n for newlines.",
+      systemInstruction: `You are a professional Arabic exam digitizer specializing in Iraqi school exams.
+Your MOST IMPORTANT rule: When you see "سX/أ" or "سX/ أ" on the same line, you MUST split it into:
+  - A main question for سX
+  - A branch subQuestion for أ (or whatever letter/number follows the slash)
+Never treat "سX/أ" as a single flat question. Always nest the branch inside the main question.
+Return only valid JSON with no markdown or extra text.`,
       responseMimeType: "application/json",
       responseSchema: {
         type: Type.OBJECT,
@@ -351,7 +415,6 @@ export async function gradeStudentPaper(
 ): Promise<{ results: { studentName: string; gradings: GradingResult[]; totalGrade: number }[] }> {
   const totalImages = imageUrls.length;
   
-  // Parallelize image compression for speed
   if (onProgress) onProgress(0, totalImages, 'compressing');
   
   const compressionPromises = imageUrls.map(async (url, index) => {
@@ -372,7 +435,6 @@ export async function gradeStudentPaper(
     throw new Error("فشل في معالجة الصور المرفوعة.");
   }
 
-  // Fallback to Client-side
   const apiKey = getApiKey();
   if (!apiKey) {
     throw new Error("مفتاح API مفقود. يرجى التأكد من إعداد GEMINI_API_KEY في متغيرات البيئة.");
@@ -380,7 +442,6 @@ export async function gradeStudentPaper(
 
   const ai = new GoogleGenAI({ apiKey });
   
-  // Get all valid question IDs to filter out hallucinations
   const validQuestionIds = new Set<string>();
   const collectIds = (qs: Question[]) => {
     qs.forEach(q => {
@@ -390,14 +451,11 @@ export async function gradeStudentPaper(
   };
   collectIds(questions);
 
-  // Flatten questions for the AI to make mapping easier and more accurate
-  // We only send leaf nodes (the actual questions to be graded)
   const flattenedQuestions: any[] = [];
   const leafQuestionIds = new Set<string>();
 
   const flatten = (qs: Question[], parentText: string = "", path: string = "") => {
     qs.forEach((q, index) => {
-      // Try to extract a clean label (e.g., "س1" or "أ")
       let label = q.text.split(/[:\-\.\/\(\)\[\]]/)[0].trim();
       if (label.length > 15 || label.length === 0) label = `Item ${index + 1}`;
       
@@ -421,11 +479,9 @@ export async function gradeStudentPaper(
   };
   flatten(questions);
 
-  // Flash can handle large contexts. 10 images per batch is efficient and fast.
   const BATCH_SIZE = 10; 
   const allResults: any[] = [];
 
-  // Schema for grading results
   const gradingSchema = {
     type: Type.OBJECT,
     properties: {
@@ -491,8 +547,8 @@ export async function gradeStudentPaper(
       2. **STRICT QUESTION MAPPING**: You MUST ONLY grade the questions listed in the "EXAM QUESTIONS" section above. 
       3. **MATCH IDs**: You MUST use the exact "id" from the list provided above for each grading result.
       4. **HIERARCHY HANDLING**: 
-         - The "label" field (e.g., "س2 / A") tells you which question and branch it is.
-         - If a student writes "س2" followed by "A", map the answer for "A" to the ID associated with label "س2 / A".
+         - The "label" field (e.g., "س2 / أ") tells you which question and branch it is.
+         - If a student writes "س2" followed by "أ", map the answer for "أ" to the ID associated with label "س2 / أ".
       5. **DO NOT HALLUCINATE**: Only use IDs from the provided list.
       6. **STUDENT ANSWER EXTRACTION**: Extract the FULL text of the student's handwritten answer verbatim.
       7. **ARABIC FEEDBACK ONLY**: Provide all feedback and student names in Arabic.
@@ -517,7 +573,7 @@ export async function gradeStudentPaper(
           systemInstruction: "You are a professional Arabic teacher. Your grading must be 100% consistent, objective, and fair. Always provide feedback in Arabic. Strictly follow the provided question IDs.",
           responseMimeType: "application/json",
           responseSchema: gradingSchema,
-          temperature: 0.1, // Near-zero for maximum consistency
+          temperature: 0.1,
           topP: 0.1,
           topK: 1
         },
@@ -526,7 +582,6 @@ export async function gradeStudentPaper(
       const parsed = robustJsonParse(result.text || '');
       
       if (parsed && parsed.results && Array.isArray(parsed.results)) {
-        // Filter out hallucinated question IDs - ONLY allow IDs from the leafQuestionIds set
         const filteredResults = parsed.results.map((student: any) => {
           const gradings = student.gradings || [];
           const uniqueGradings: any[] = [];
@@ -534,12 +589,10 @@ export async function gradeStudentPaper(
 
           gradings.forEach((g: any) => {
             if (leafQuestionIds.has(g.questionId) && !seenIds.has(g.questionId)) {
-              // Map batch-relative pageIndex to global image index
               if (g.pageIndex !== undefined) {
                 g.pageIndex = i + g.pageIndex;
               }
               
-              // Include maxGrade for visual display
               const qInfo = flattenedQuestions.find(fq => fq.id === g.questionId);
               if (qInfo) {
                 g.maxGrade = qInfo.maxGrade;
@@ -564,7 +617,6 @@ export async function gradeStudentPaper(
       if (e.message?.includes('429') || e.message?.includes('quota')) {
         throw new Error("تم تجاوز حصة استخدام API (Quota Exceeded). يرجى المحاولة لاحقاً.");
       }
-      // If we already have some results, we might want to return them instead of failing completely
       if (allResults.length > 0) {
         console.warn("Returning partial results due to error in batch.");
         break; 
@@ -573,7 +625,7 @@ export async function gradeStudentPaper(
     }
   }
 
-  // Merge results by student name to handle cases where a student's pages are split across batches
+  // Merge results by student name
   const mergedMap = new Map<string, any>();
   
   const normalizeName = (name: string) => {
@@ -590,11 +642,9 @@ export async function gradeStudentPaper(
     if (mergedMap.has(normName)) {
       const existing = mergedMap.get(normName);
       
-      // Merge gradings
       res.gradings.forEach((newG: any) => {
         const existingIdx = existing.gradings.findIndex((eg: any) => eg.questionId === newG.questionId);
         if (existingIdx > -1) {
-          // If duplicate question, keep the one with the higher grade
           if ((newG.grade || 0) > (existing.gradings[existingIdx].grade || 0)) {
             existing.gradings[existingIdx] = newG;
           }
@@ -603,7 +653,6 @@ export async function gradeStudentPaper(
         }
       });
       
-      // Recalculate total grade based on merged gradings
       existing.totalGrade = existing.gradings.reduce((sum: number, g: any) => sum + (g.grade || 0), 0);
     } else {
       mergedMap.set(normName, { ...res, gradings: [...res.gradings] });
