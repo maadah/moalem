@@ -21,6 +21,8 @@ import { ref, uploadString, getDownloadURL, uploadBytes } from 'firebase/storage
 import { auth, db, storage } from './firebase';
 import { Question, gradeStudentPaper, extractExamFromImages } from './services/geminiService';
 import jsPDF from 'jspdf';
+
+const ARABIC_BRANCH_LETTERS = ['أ', 'ب', 'ج', 'د', 'هـ', 'و', 'ز', 'ح', 'ط', 'ي'];
 import autoTable from 'jspdf-autotable';
 import html2canvas from 'html2canvas';
 import { clsx, type ClassValue } from 'clsx';
@@ -2079,7 +2081,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-bold text-blue-600 shrink-0">
-                            {q.subStyle === 'letters' ? `(${String.fromCharCode(97 + sqIndex)})` : `${sqIndex + 1}-`}
+                            {q.subStyle === 'letters' ? `(${ARABIC_BRANCH_LETTERS[sqIndex % ARABIC_BRANCH_LETTERS.length]})` : `${sqIndex + 1}-`}
                           </span>
                           <div className="flex items-center gap-1">
                             {(sq.questionImage || sq.answerImage) && (

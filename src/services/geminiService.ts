@@ -182,24 +182,25 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
       systemInstruction: `You are a high-end Iraqi Exam Digitization Expert. Your mission is to deconstruct math papers with 100% architectural accuracy.
       
       STRICT HIERARCHY (3 LEVELS):
-      1. Main Question (س1, س2, س3...): The container for a whole block of questions.
-      2. Branch (أ, ب, ج, د...): The specific section instruction (e.g., "أ/ جد ناتج ما يلي :").
-      3. Point (1, 2, 3...): The individual math tasks or multiple choice questions.
-      
-      MAPPING RULES:
-      - س1 is Level 1.
-      - أ/ is Level 2 (Nested inside س1).
-      - 1- is Level 3 (Nested inside أ/).
+      1. Main Question (س1, س2...): The root questions.
+         - 'text' should be the main instruction if any (e.g., "أجب عن خمسة أسئلة"). If none, use "س1".
+         - 'subStyle' MUST be "letters".
+         - Contains Branches.
+      2. Branch (أ, ب, ج...): The section under a question.
+         - 'text' should be the branch instruction (e.g., "جد ناتج ما يلي :"). 
+         - DO NOT include the manual labels like "أ/" or "ب/" in the 'text'.
+         - 'subStyle' MUST be "numbers".
+         - Contains Points.
+      3. Point (1, 2, 3...): The actual task.
+         - 'text' is ONLY the math problem or task (e.g., "٥٩٣٨٠٨٧١٩ + ١٢٢٤٧٩٨٣٠").
+         - DO NOT include labels like "1-" or "2-" in the 'text'.
+         - 'subQuestions' MUST be empty. Never nest points inside points.
 
       CRITICAL CONSTRAINTS:
-      - NO HALLUCINATIONS: Do not write "السؤال الأول" if the paper says "س1". Use the exact text from the paper.
-      - STICKY BRANCHES: If you see "ب/" and previously "س1", this "ب/" MUST be a subQuestion of "س1". Do not start a new Main Question object for branches.
-      - CLEAN POINTS: Points (Level 3) should only contain the actual problem (e.g., "5 + 5"). Do not include the branch label "أ/" inside point text.
-      - PRECISE GRADES: If a grade is written (e.g., ٢٠ درجة), put 20 in the 'grade' field. Do not invent grades like "00001".
-      - CONTEXT: If there's general text before questions (e.g., "أجب عن خمسة أسئلة"), put this in the 'title' field of the root object, not as a Question.
-
-      VISUAL VERIFICATION:
-      - Match the physical order. If (ب) comes after (أ), they should be siblings in the same Main Question's subQuestions array.`,
+      - NO NESTED POINTS: A point (Level 3) cannot have subQuestions. It is a leaf node.
+      - STICKY BRANCHES: Every Branch (أ, ب, ج..) belongs to the LAST mentioned Question (س1, س2..).
+      - PRECISE GRADES: Map grades (درجة) to numeric 'grade' field. Ignore placeholders like "00001".
+      - VALIDATION: Ensure the hierarchy matches the paper. If "ب" is in the paper, it's a subQuestion of the same "س" as "أ".`,
       responseMimeType: "application/json",
       responseSchema: {
         type: "OBJECT",
@@ -218,6 +219,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
                 answer: { type: "STRING" },
                 grade: { type: "NUMBER" },
                 type: { type: "STRING" },
+                subStyle: { type: "STRING", enum: ["numbers", "letters"] },
                 subQuestions: {
                   type: "ARRAY",
                   items: {
@@ -229,6 +231,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
                       answer: { type: "STRING" },
                       grade: { type: "NUMBER" },
                       type: { type: "STRING" },
+                      subStyle: { type: "STRING", enum: ["numbers", "letters"] },
                       subQuestions: { // Added Level 3
                         type: "ARRAY",
                         items: {
