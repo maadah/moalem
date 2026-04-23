@@ -182,24 +182,36 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
       systemInstruction: `You are a high-end Iraqi Exam Digitization Expert. Your mission is to deconstruct math papers with 100% architectural accuracy.
       
       STRICT HIERARCHY (3 LEVELS):
-      1. Main Question (س1, س2...): The root questions.
-         - 'text' should be the main instruction if any (e.g., "أجب عن خمسة أسئلة"). If none, use "س1".
-         - 'subStyle' MUST be "letters".
-         - Contains Branches.
-      2. Branch (أ, ب, ج...): The section under a question.
-         - 'text' should be the branch instruction (e.g., "جد ناتج ما يلي :"). 
-         - DO NOT include the manual labels like "أ/" or "ب/" in the 'text'.
-         - 'subStyle' MUST be "numbers".
-         - Contains Points.
-      3. Point (1, 2, 3...): The actual task.
-         - 'text' is ONLY the math problem or task (e.g., "٥٩٣٨٠٨٧١٩ + ١٢٢٤٧٩٨٣٠").
-         - DO NOT include labels like "1-" or "2-" in the 'text'.
-         - 'subQuestions' MUST be empty. Never nest points inside points.
+      1. Main Question (س1, س2...): The root container.
+         - 'text': Should be ONLY the label (e.g., "س1"). If there is a global instruction like "أجب عن خمسة أسئلة", it goes into the overall 'title' field.
+         - 'subStyle': ALWAYS "letters".
+      2. Branch (أ، ب، ج...): The sub-section.
+         - 'text': Use the instruction text (e.g., "جد ناتج ما يلي :") or the standalone question text.
+         - 'subStyle': ALWAYS "numbers" (even if it currently has no sub-questions, for future consistency).
+         - Labels like "أ/" or "ب/" MUST NOT be included in the 'text'.
+      3. Point (1, 2, 3...): The specific math problems or multiple choice items.
+         - 'text': The actual problem (e.g., "5 + 5"). Labels like "1-" MUST NOT be in the 'text'.
+         - 'subQuestions': MUST be empty. Never nest deeper than this.
+
+      CRITICAL CLEANING RULES:
+      1. If a Question has branches (أ، ب), it MUST be Level 1.
+      2. If a Branch has sub-items (1, 2, 3), it MUST have those items as Level 3 subQuestions.
+      3. If a question is just "س1/أ/ 5+5", then Level 1 is "س1", and Level 2 is "5+5" (with empty subQuestions).
+      4. STICKY HIERARCHY: Do not start a new Main Question (س2) when you see branch "ب/". Ensure all branches (أ، ب، ج) are siblings under the same parent Question.
+      5. NO HALUCINATIONS: Do not invent numbering. If the paper says "أ", use Level 2. If it says "1", use Level 3.
 
       CRITICAL CONSTRAINTS:
       - NO NESTED POINTS: A point (Level 3) cannot have subQuestions. It is a leaf node.
       - STICKY BRANCHES: Every Branch (أ, ب, ج..) belongs to the LAST mentioned Question (س1, س2..).
       - PRECISE GRADES: Map grades (درجة) to numeric 'grade' field. Ignore placeholders like "00001".
+      - MAPPING EXAMPLE:
+        "س1 / أ / جد ناتج ما يلي : 1- 5+5 2- 6+6" 
+        Should become:
+        { "text": "س1", "subStyle": "letters", "subQuestions": [
+            { "text": "جد ناتج ما يلي :", "subStyle": "numbers", "subQuestions": [
+                { "text": "5+5" }, { "text": "6+6" }
+            ]}
+        ]}
       - VALIDATION: Ensure the hierarchy matches the paper. If "ب" is in the paper, it's a subQuestion of the same "س" as "أ".`,
       responseMimeType: "application/json",
       responseSchema: {
@@ -212,7 +224,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
             type: "ARRAY",
             items: {
               type: "OBJECT",
-              required: ["id", "text", "type"],
+              required: ["id", "text", "type", "subStyle"],
               properties: {
                 id: { type: "STRING" },
                 text: { type: "STRING" },
@@ -224,7 +236,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
                   type: "ARRAY",
                   items: {
                     type: "OBJECT",
-                    required: ["id", "text", "type"],
+                    required: ["id", "text", "type", "subStyle"],
                     properties: {
                       id: { type: "STRING" },
                       text: { type: "STRING" },
@@ -276,16 +288,22 @@ function makeId(base: string, suffix: string | number): string {
   return `${base}_auto_${suffix}`;
 }
 
-function fixInlineSubQuestions(q: Question, parentId?: string): Question {
+function fixInlineSubQuestions(q: Question, parentId?: string, level: number = 1): Question {
   const id = q.id || makeId(parentId || 'q', Math.random().toString(36).slice(2, 6));
 
+  // If Gemini already provided a structure, trust its hierarchy and just fill missing IDs
   if (q.subQuestions && q.subQuestions.length > 0) {
     return {
       ...q,
       id,
-      subQuestions: q.subQuestions.map((sq, i) => fixInlineSubQuestions(sq, `${id}_${i}`)),
+      // Default subStyle if missing but children exist
+      subStyle: q.subStyle || (level === 1 ? 'letters' : 'numbers'),
+      subQuestions: q.subQuestions.map((sq, i) => fixInlineSubQuestions(sq, `${id}_${i}`, level + 1)),
     };
   }
+
+  // Prevent splitting of text beyond level 2 (don't split points themselves)
+  if (level >= 3) return { ...q, id };
 
   const text = (q.text || '').trim();
   const inlinePattern = /^(س\s*[١٢٣٤٥٦٧٨٩٠\d]*)\s*[\/\\]\s*([أبجدهوزحطي١٢٣٤٥٦٧٨٩٠1-9])([\s\S]*)$/u;
@@ -351,7 +369,9 @@ interface BranchSegment { label: string; body: string; }
 
 function splitIntoBranchSegments(text: string): BranchSegment[] {
   const normalised = text.replace(/\r\n?/g, '\n');
-  const labelRe = /(?:^|\n|(?<=\/\s*))([أبجدهوزحطي١٢٣٤٥٦٧٨٩٠1-9])[\s\/\-\.]*/gu;
+  // Iraqi labels often look like: أ/, ب), 1-, ١.
+  // We look for a character at start of line followed strictly by / or ) or - or .
+  const labelRe = /(?:^|\n)([أبجدهوزحطي١٢٣٤٥٦٧٨٩٠1-9])[\s]*[\/\)\-\.](?!\d)/gu;
 
   const matches: { label: string; index: number }[] = [];
   let m: RegExpExecArray | null;
