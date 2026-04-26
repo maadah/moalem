@@ -216,6 +216,7 @@ const generatePDFFromElement = async (element: HTMLElement, fileName: string, op
           clonedElement.style.opacity = '1';
           clonedElement.style.width = '210mm';
           clonedElement.style.margin = '0';
+          clonedElement.style.boxSizing = 'border-box';
           
           if (options.padding) {
             clonedElement.style.padding = options.padding;
@@ -1554,8 +1555,11 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
     
     setIsPrinting(true);
     try {
-      // For exams, we don't force extra padding because the template has p-12
-      await generatePDFFromElement(ref.current, `${title || 'exam'}_${mode}.pdf`, { useElementWidth: true });
+      // Add padding to ensure content is not cut off and has nice margins
+      await generatePDFFromElement(ref.current, `${title || 'exam'}_${mode}.pdf`, { 
+        useElementWidth: true,
+        padding: '15mm' 
+      });
     } finally {
       setIsPrinting(false);
     }
@@ -1813,16 +1817,16 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
               {questions.map((q, idx) => (
                 <div key={q.id} className="space-y-4">
                   <div className="flex justify-between items-start">
-                    <h4 className="text-xl font-bold">س{idx + 1}: {q.text}</h4>
+                    <h4 className="text-xl font-bold leading-relaxed">س{idx + 1}: {q.text}</h4>
                     <span className="font-bold">({q.grade} درجة)</span>
                   </div>
                   {q.questionImage && <img src={q.questionImage} className="max-h-64 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
                   
                   <div className="mr-6 space-y-4">
                     {q.subQuestions?.map((sq, sqIdx) => (
-                      <div key={sq.id} className="space-y-2">
+                      <div key={sq.id} className="space-y-4">
                         <div className="flex justify-between">
-                          <p className="font-medium">
+                          <p className="font-medium leading-relaxed">
                             {q.subStyle === 'letters' ? `${String.fromCharCode(1571 + sqIdx)}- ` : `${sqIdx + 1}- `}
                             {sq.text}
                           </p>
@@ -1830,10 +1834,10 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                         </div>
                         {sq.questionImage && <img src={sq.questionImage} className="max-h-48 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
                         
-                        <div className="mr-6 space-y-2">
+                        <div className="mr-6 space-y-4">
                           {sq.subQuestions?.map((ssq, ssqIdx) => (
                             <div key={ssq.id} className="flex justify-between text-sm">
-                              <p>{ssqIdx + 1}- {ssq.text}</p>
+                              <p className="leading-relaxed">{ssqIdx + 1}- {ssq.text}</p>
                               <span>({ssq.grade} درجة)</span>
                             </div>
                           ))}
@@ -1864,7 +1868,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
               {questions.map((q, idx) => (
                 <div key={q.id} className="p-6 border-2 border-stone-200 rounded-2xl space-y-6">
                   <div className="flex justify-between items-center bg-stone-50 p-3 rounded-xl">
-                    <h4 className="text-xl font-bold">س{idx + 1}: {q.text}</h4>
+                    <h4 className="text-xl font-bold leading-relaxed">س{idx + 1}: {q.text}</h4>
                     <span className="bg-stone-900 text-white px-4 py-1 rounded-full text-sm">{q.grade} درجة</span>
                   </div>
                   
@@ -1878,16 +1882,35 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
 
                   <div className="mr-6 space-y-6">
                     {q.subQuestions?.map((sq, sqIdx) => (
-                      <div key={sq.id} className="space-y-4 border-r-2 border-stone-100 pr-4">
+                      <div key={sq.id} className="space-y-6 border-r-2 border-stone-100 pr-4">
                         <div className="flex justify-between font-bold">
-                          <p>{q.subStyle === 'letters' ? `${String.fromCharCode(1571 + sqIdx)}- ` : `${sqIdx + 1}- `} {sq.text}</p>
+                          <p className="leading-relaxed">{q.subStyle === 'letters' ? `${String.fromCharCode(1571 + sqIdx)}- ` : `${sqIdx + 1}- `} {sq.text}</p>
                           <span>{sq.grade} درجة</span>
                         </div>
                         {sq.answer && (
                           <div className="bg-stone-50 p-3 rounded-lg border border-stone-200 text-sm">
                             <p className="font-bold text-stone-500 mb-1">الجواب:</p>
-                            <p>{sq.answer}</p>
+                            <p className="whitespace-pre-wrap">{sq.answer}</p>
                             {sq.answerImage && <img src={sq.answerImage} className="mt-2 max-h-48 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
+                          </div>
+                        )}
+                        {sq.subQuestions && sq.subQuestions.length > 0 && (
+                          <div className="mr-6 space-y-4">
+                            {sq.subQuestions.map((ssq, ssqIdx) => (
+                              <div key={ssq.id} className="space-y-2 border-r border-stone-100 pr-4">
+                                <div className="flex justify-between font-bold text-sm">
+                                  <p className="leading-relaxed">{ssqIdx + 1}- {ssq.text}</p>
+                                  <span>{ssq.grade} درجة</span>
+                                </div>
+                                {ssq.answer && (
+                                  <div className="bg-white p-2 rounded border border-stone-100 text-xs">
+                                    <p className="font-bold text-stone-400 mb-1">الجواب:</p>
+                                    <p className="whitespace-pre-wrap">{ssq.answer}</p>
+                                    {ssq.answerImage && <img src={ssq.answerImage} className="mt-1 max-h-32 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>

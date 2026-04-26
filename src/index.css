@@ -10,8 +10,10 @@
 .pdf-export-container {
   background-color: #ffffff !important;
   color: #1c1917 !important;
-  font-family: "Inter", sans-serif !important;
+  font-family: "Amiri", serif !important;
+  line-height: 1.8 !important;
   box-shadow: none !important;
+  box-sizing: border-box !important;
 }
 
 .pdf-export-container, 
