@@ -60,7 +60,7 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        (request.auth.token.email.lower() == "asmaomar5566@gmail.com" || 
+        (request.auth.token.get('email', '').lower() == "asmaomar5566@gmail.com" || 
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
           get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
     }

@@ -15,7 +15,7 @@ import {
 import { 
   collection, addDoc, query, where, onSnapshot, 
   serverTimestamp, doc, updateDoc, deleteDoc, getDoc, setDoc,
-  getDocFromServer, increment, getDocs, writeBatch
+  getDocFromServer, increment, getDocs, writeBatch, orderBy
 } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, uploadBytes } from 'firebase/storage';
 import { auth, db, storage } from './firebase';
@@ -75,11 +75,25 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
   render() {
     if (this.state.hasError) {
       let errorMessage = "حدث خطأ غير متوقع في التطبيق.";
+      let technicalDetails = "";
+      
       try {
-        const parsed = JSON.parse(this.state.error.message);
-        if (parsed.error) {
-          errorMessage = `خطأ في قاعدة البيانات: ${parsed.error}`;
+        if (this.state.error?.message) {
+          try {
+            const parsed = JSON.parse(this.state.error.message);
+            if (parsed.error) {
+              errorMessage = `خطأ في قاعدة البيانات: ${parsed.error}`;
+            } else {
+              errorMessage = this.state.error.message;
+            }
+          } catch (e) {
+            // Not a JSON error, just use the raw message
+            errorMessage = this.state.error.message;
+          }
         }
+        
+        // Add technical details for debugging
+        technicalDetails = this.state.error?.stack || String(this.state.error);
       } catch (e) {}
 
       return (
@@ -87,7 +101,17 @@ class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { has
           <div className="max-w-md w-full bg-white p-8 rounded-3xl shadow-xl border border-stone-200">
             <XCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-stone-900 mb-2">عذراً، حدث خطأ</h2>
-            <p className="text-stone-600 mb-6">{errorMessage}</p>
+            <p className="text-stone-600 mb-4">{errorMessage}</p>
+            
+            {technicalDetails && (
+              <details className="mb-6 text-right">
+                <summary className="text-[10px] text-stone-400 cursor-pointer hover:text-stone-600">التفاصيل التقنية (للمطور)</summary>
+                <pre className="mt-2 p-3 bg-stone-50 rounded-xl text-[8px] text-stone-500 text-left overflow-auto max-h-32 dir-ltr">
+                  {technicalDetails}
+                </pre>
+              </details>
+            )}
+
             <button 
               onClick={() => window.location.reload()}
               className="w-full bg-stone-900 text-white py-3 rounded-xl font-medium hover:bg-stone-800 transition-colors"
@@ -474,7 +498,7 @@ function App() {
       return;
     }
     
-    const isAdminEmail = user.email?.toLowerCase().trim() === 'asmaomar5566@gmail.com';
+    const isAdminEmail = user.email?.toLowerCase()?.trim() === 'asmaomar5566@gmail.com';
     const isAdminRole = userProfile?.role === 'admin';
     
     if (!isAdminEmail && !isAdminRole) {
@@ -515,7 +539,7 @@ function App() {
           
           if (userDoc.exists()) {
             const data = userDoc.data() as UserProfile;
-            const isAdminEmail = u.email?.toLowerCase().trim() === 'asmaomar5566@gmail.com';
+            const isAdminEmail = u.email?.toLowerCase()?.trim() === 'asmaomar5566@gmail.com';
             
             if (isAdminEmail) {
               console.log("Auth: Current user is identified as ADMIN by email.");
@@ -534,7 +558,7 @@ function App() {
             setUserProfile(data);
           } else {
             console.log("Auth: No user profile found. Creating new profile...");
-            const isAdminEmail = u.email?.toLowerCase().trim() === 'asmaomar5566@gmail.com';
+            const isAdminEmail = u.email?.toLowerCase()?.trim() === 'asmaomar5566@gmail.com';
             const newProfile: UserProfile = {
               uid: u.uid,
               email: u.email || '',
@@ -746,7 +770,7 @@ function App() {
               <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<LayoutGrid className="w-4 h-4" />} label="لوحة التحكم" />
               <NavButton active={view === 'create-exam'} onClick={() => setView('create-exam')} icon={<Plus className="w-4 h-4" />} label="إنشاء امتحان" />
               <NavButton active={view === 'results'} onClick={() => setView('results')} icon={<List className="w-4 h-4" />} label="النتائج" />
-              {(userProfile?.role === 'admin' || user.email?.toLowerCase().trim() === 'asmaomar5566@gmail.com') && (
+              {(userProfile?.role === 'admin' || user.email?.toLowerCase()?.trim() === 'asmaomar5566@gmail.com') && (
                 <div className="relative">
                   <NavButton active={view === 'admin'} onClick={() => setView('admin')} icon={<Users className="w-4 h-4" />} label="الإدارة" />
                   {pendingCount > 0 && (
@@ -882,7 +906,7 @@ function AdminDashboard() {
 
   useEffect(() => {
     console.log("AdminDashboard: Starting users listener...");
-    const q = query(collection(db, 'users'));
+    const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       console.log("AdminDashboard: Received users snapshot, size:", snapshot.size);
       const fetchedUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile));
@@ -922,10 +946,8 @@ function AdminDashboard() {
     }
   };
 
-  if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-emerald-600" /></div>;
-
   const pendingUsers = users.filter(u => !u.status || (u.status as string) === 'pending');
-  const activeUsers = users.filter(u => (u.status as string) === 'approved' && (u.role !== 'admin' || u.email?.toLowerCase().trim() === 'asmaomar5566@gmail.com'));
+  const activeUsers = users.filter(u => (u.status as string) === 'approved' && (u.role !== 'admin' || u.email?.toLowerCase()?.trim() === 'asmaomar5566@gmail.com'));
 
   useEffect(() => {
     console.log("AdminDashboard Check: Total users:", users.length);
@@ -935,6 +957,8 @@ function AdminDashboard() {
       console.log("AdminDashboard Check: First user status:", users[0].status);
     }
   }, [users, pendingUsers.length, activeUsers.length]);
+
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-emerald-600" /></div>;
 
   return (
     <motion.div 
@@ -1037,11 +1061,11 @@ function AdminDashboard() {
                     <div className="flex items-center gap-2">
                       <div className="w-20 h-1.5 bg-stone-100 rounded-full overflow-hidden">
                         <div 
-                          className={cn("h-full", u.pagesUsed / u.pageLimit > 0.9 ? "bg-red-500" : "bg-emerald-500")}
-                          style={{ width: `${Math.min(100, (u.pagesUsed / u.pageLimit) * 100)}%` }}
+                          className={cn("h-full transition-all", (u.pagesUsed || 0) / (u.pageLimit || 1) > 0.9 ? "bg-red-500" : "bg-emerald-500")}
+                          style={{ width: `${Math.min(100, ((u.pagesUsed || 0) / (u.pageLimit || 1)) * 100)}%` }}
                         />
                       </div>
-                      <span className="text-xs font-bold">{u.pagesUsed}</span>
+                      <span className="text-xs font-bold">{u.pagesUsed || 0}</span>
                     </div>
                   </td>
                   <td className="px-6 py-4 text-sm font-medium text-stone-600">{u.questionsCount || 0}</td>
