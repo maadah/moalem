@@ -129,6 +129,131 @@ function robustJsonParse(text: string): any {
   return null;
 }
 
+export async function extractExamFromDualImages(
+  questionImages: string[],
+  answerImages: string[],
+  apiKey: string
+): Promise<{ title: string, questions: Question[], requiredQuestionsCount?: number }> {
+  const ai = new GoogleGenAI({ apiKey });
+  const prompt = `
+    You are an expert at reading Arabic Iraqi school exam papers AND their model answers. 
+    You are provided with two sets of images:
+    1. QUESTION IMAGES: Contains the exam questions.
+    2. ANSWER IMAGES: Contains the model answers for those questions.
+
+    Your mission is to analyze both sets, extract the questions, and MATCH each question to its correct model answer from the answer images.
+
+    ============================================================
+    STEP 1 — HIERARCHAL EXTRACTION (Iraqi Format)
+    ============================================================
+    Level 1 — MAIN QUESTION:   starts with س١ / س٢ / س٣ (or س1, س2, س3)
+    Level 2 — BRANCH:          starts with أ / ب / ج (Arabic letters)
+    Level 3 — POINT:           starts with ١ / ٢ / ٣ (numbers)
+
+    ============================================================
+    STEP 2 — ANSWER MATCHING
+    ============================================================
+    • Look at the ANSWER IMAGES. They usually follow the same numbering.
+    • Match the answer for س1 أ 1 to the corresponding question entry.
+    • If an answer is found for a specific branch or point, put it in the 'answer' field of that leaf node.
+    • If a question segment doesn't have an explicit answer in the images, leave it empty.
+
+    OUTPUT FORMAT:
+    {
+      "title": "Exam title (from question papers)",
+      "requiredQuestionsCount": <number>,
+      "questions": [ ... ]
+    }
+  `;
+
+  const qImageParts = await Promise.all(questionImages.map(async (base64) => {
+    const dataUrl = base64.startsWith('data:') ? base64 : `data:image/jpeg;base64,${base64}`;
+    const compressedData = await compressImage(dataUrl);
+    return { inlineData: { data: compressedData, mimeType: "image/jpeg" } };
+  }));
+
+  const aImageParts = await Promise.all(answerImages.map(async (base64) => {
+    const dataUrl = base64.startsWith('data:') ? base64 : `data:image/jpeg;base64,${base64}`;
+    const compressedData = await compressImage(dataUrl);
+    return { inlineData: { data: compressedData, mimeType: "image/jpeg" } };
+  }));
+
+  const response = await retryWithBackoff(() => ai.models.generateContent({
+    model: "gemini-3.1-pro-preview", 
+    contents: [
+      { text: "QUESTION IMAGES:" },
+      ...qImageParts,
+      { text: "ANSWER IMAGES:" },
+      ...aImageParts,
+      { text: prompt }
+    ],
+    config: {
+      systemInstruction: `You are a professional teacher. Match questions to answers with perfect accuracy. 
+      Arabic text must be preserved exactly. Ensure the 3-level hierarchy is strictly followed.`,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: "OBJECT",
+        required: ["questions"],
+        properties: {
+          title: { type: "STRING" },
+          requiredQuestionsCount: { type: "NUMBER" },
+          questions: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              required: ["id", "text", "type", "subStyle"],
+              properties: {
+                id: { type: "STRING" },
+                text: { type: "STRING" },
+                answer: { type: "STRING" },
+                grade: { type: "NUMBER" },
+                type: { type: "STRING" },
+                subStyle: { type: "STRING", enum: ["numbers", "letters"] },
+                subQuestions: {
+                  type: "ARRAY",
+                  items: {
+                    type: "OBJECT",
+                    required: ["id", "text", "type", "subStyle"],
+                    properties: {
+                      id: { type: "STRING" },
+                      text: { type: "STRING" },
+                      answer: { type: "STRING" },
+                      grade: { type: "NUMBER" },
+                      type: { type: "STRING" },
+                      subStyle: { type: "STRING", enum: ["numbers", "letters"] },
+                      subQuestions: {
+                        type: "ARRAY",
+                        items: {
+                          type: "OBJECT",
+                          required: ["id", "text", "type"],
+                          properties: {
+                            id: { type: "STRING" },
+                            text: { type: "STRING" },
+                            answer: { type: "STRING" },
+                            grade: { type: "NUMBER" },
+                            type: { type: "STRING" }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }));
+
+  const text = response.text || '';
+  let parsed = robustJsonParse(text);
+  if (parsed && Array.isArray(parsed.questions)) {
+    parsed.questions = parsed.questions.map((q: any) => fixInlineSubQuestions(q));
+  }
+  return parsed || { title: "", questions: [] };
+}
+
 export async function extractExamFromImages(base64Images: string[], apiKey: string): Promise<{ title: string, questions: Question[], requiredQuestionsCount?: number }> {
   const ai = new GoogleGenAI({ apiKey });
   const prompt = `

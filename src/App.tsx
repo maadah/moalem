@@ -19,7 +19,7 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadString, getDownloadURL, uploadBytes } from 'firebase/storage';
 import { auth, db, storage } from './firebase';
-import { Question, gradeStudentPaper, extractExamFromImages } from './services/geminiService';
+import { Question, gradeStudentPaper, extractExamFromImages, extractExamFromDualImages } from './services/geminiService';
 import jsPDF from 'jspdf';
 
 const ARABIC_BRANCH_LETTERS = ['أ', 'ب', 'ج', 'د', 'هـ', 'و', 'ز', 'ح', 'ط', 'ي'];
@@ -1223,8 +1223,14 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
   const [showPrintMenu, setShowPrintMenu] = useState(false);
   const [printMode, setPrintMode] = useState<'questions' | 'both'>('questions');
   const [extractionImages, setExtractionImages] = useState<string[]>([]);
+  const [dualQImages, setDualQImages] = useState<string[]>([]);
+  const [dualAImages, setDualAImages] = useState<string[]>([]);
+  const [extractionMode, setExtractionMode] = useState<'single' | 'dual' | null>(null);
+
   const extractionInputRef = useRef<HTMLInputElement>(null);
   const extractionCameraInputRef = useRef<HTMLInputElement>(null);
+  const dualQInputRef = useRef<HTMLInputElement>(null);
+  const dualAInputRef = useRef<HTMLInputElement>(null);
   const examPrintRef = useRef<HTMLDivElement>(null);
   const examFullPrintRef = useRef<HTMLDivElement>(null);
 
@@ -1322,10 +1328,14 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
   };
 
   const handleExtract = async () => {
-    if (extractionImages.length === 0) return;
+    if (extractionMode === 'single' && extractionImages.length === 0) return;
+    if (extractionMode === 'dual' && (dualQImages.length === 0 || dualAImages.length === 0)) {
+      alert('يرجى اختيار صور الأسئلة والأجوبة معاً');
+      return;
+    }
+
     setIsExtracting(true);
     try {
-      // Get API key
       const urlParams = new URLSearchParams(window.location.search);
       const apiKey = urlParams.get('key') || localStorage.getItem('GEMINI_API_KEY_AUTO') || import.meta.env.VITE_GEMINI_API_KEY;
       
@@ -1334,7 +1344,13 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
         return;
       }
 
-      const result = await extractExamFromImages(extractionImages, apiKey);
+      let result;
+      if (extractionMode === 'single') {
+        result = await extractExamFromImages(extractionImages, apiKey);
+      } else {
+        result = await extractExamFromDualImages(dualQImages, dualAImages, apiKey);
+      }
+
       console.log('Extraction result:', result);
       
       if (result.title) setTitle(result.title);
@@ -1343,16 +1359,16 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
       if (result.questions && result.questions.length > 0) {
         // Update user pagesUsed
         if (userProfile) {
+          const totalPages = extractionMode === 'single' ? extractionImages.length : (dualQImages.length + dualAImages.length);
           try {
             await setDoc(doc(db, 'users', user.uid), {
-              pagesUsed: (userProfile.pagesUsed || 0) + extractionImages.length
+              pagesUsed: (userProfile.pagesUsed || 0) + totalPages
             }, { merge: true });
           } catch (e) {
             handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`);
           }
         }
 
-        // Ensure all questions have IDs
         const ensureIds = (qs: Question[]): Question[] => {
           return qs.map(q => ({
             ...q,
@@ -1361,15 +1377,18 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
           }));
         };
         setQuestions(ensureIds(result.questions));
-        alert('تم استخراج الأسئلة بنجاح');
+        alert('تم استخراج الأسئلة والأجوبة بنجاح');
       } else {
-        alert('تمت المعالجة ولكن لم يتم العثور على أسئلة واضحة. يرجى التأكد من جودة الصورة.');
+        alert('تمت المعالجة ولكن لم يتم العثور على بيانات واضحة. يرجى التأكد من جودة الصور.');
       }
       
       setExtractionImages([]);
+      setDualQImages([]);
+      setDualAImages([]);
+      setExtractionMode(null);
     } catch (e) {
       console.error(e);
-      alert('حدث خطأ أثناء استخراج الأسئلة');
+      alert('حدث خطأ أثناء استخراج البيانات');
     } finally {
       setIsExtracting(false);
     }
@@ -1583,23 +1602,39 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                 alert(`عذراً، لقد تجاوزت الحد المسموح به من الصفحات (${userProfile.pageLimit}). يرجى التواصل مع الإدارة لزيادة الحد.`);
                 return;
               }
+              setExtractionMode('single');
               extractionInputRef.current?.click();
             }}
-            className="px-6 py-2 rounded-xl bg-stone-100 text-stone-900 flex items-center gap-2 hover:bg-stone-200 transition-all"
+            className="px-6 py-2 rounded-xl bg-stone-100 text-stone-900 flex items-center gap-2 hover:bg-stone-200 transition-all text-sm"
             title="رفع من الجهاز"
           >
             <FileUp className="w-4 h-4" />
-            استخراج من صور
+            استخراج من صور (أسئلة)
           </button>
+          
+          <button 
+            onClick={() => {
+              setExtractionMode('dual');
+              setDualQImages([]);
+              setDualAImages([]);
+            }}
+            className="px-6 py-2 rounded-xl bg-emerald-100 text-emerald-900 flex items-center gap-2 hover:bg-emerald-200 transition-all text-sm border border-emerald-200"
+            title="استخراج الأسئلة والأجوبة معاً من صور منفصلة"
+          >
+            <Layers className="w-4 h-4" />
+            استخراج (أسئلة + أجوبة) منفصلة
+          </button>
+
           <button 
             onClick={() => {
               if (userProfile && (userProfile.pagesUsed + extractionImages.length) > userProfile.pageLimit) {
                 alert(`عذراً، لقد تجاوزت الحد المسموح به من الصفحات (${userProfile.pageLimit}). يرجى التواصل مع الإدارة لزيادة الحد.`);
                 return;
               }
+              setExtractionMode('single');
               extractionCameraInputRef.current?.click();
             }}
-            className="px-6 py-2 rounded-xl bg-stone-100 text-stone-900 flex items-center gap-2 hover:bg-stone-200 transition-all"
+            className="px-6 py-2 rounded-xl bg-stone-100 text-stone-900 flex items-center gap-2 hover:bg-stone-200 transition-all text-sm"
             title="فتح الكاميرا"
           >
             <Camera className="w-4 h-4" />
@@ -1619,6 +1654,37 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
             onChange={handleExtractionFileChange} 
             accept="image/*" 
             capture="environment"
+            className="hidden" 
+          />
+          
+          <input 
+            type="file" 
+            ref={dualQInputRef} 
+            onChange={(e) => {
+              const files = Array.from(e.target.files || []);
+              Promise.all(files.map(f => new Promise<string>(r => {
+                const fr = new FileReader();
+                fr.onloadend = () => r(fr.result as string);
+                fr.readAsDataURL(f);
+              }))).then(res => setDualQImages(prev => [...prev, ...res]));
+            }} 
+            accept="image/*" 
+            multiple 
+            className="hidden" 
+          />
+          <input 
+            type="file" 
+            ref={dualAInputRef} 
+            onChange={(e) => {
+              const files = Array.from(e.target.files || []);
+              Promise.all(files.map(f => new Promise<string>(r => {
+                const fr = new FileReader();
+                fr.onloadend = () => r(fr.result as string);
+                fr.readAsDataURL(f);
+              }))).then(res => setDualAImages(prev => [...prev, ...res]));
+            }} 
+            accept="image/*" 
+            multiple 
             className="hidden" 
           />
           <button onClick={onCancel} className="px-6 py-2 rounded-xl text-stone-500 hover:bg-stone-100 transition-colors">إلغاء</button>
@@ -1680,47 +1746,105 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
         </div>
       </div>
 
-      {extractionImages.length > 0 && (
+      {(extractionImages.length > 0 || extractionMode === 'dual') && (
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 space-y-4"
         >
-          <div className="flex items-center justify-between">
-            <h3 className="text-emerald-800 font-bold flex items-center gap-2">
-              <ImageIcon className="w-5 h-5" />
-              صور جاهزة للاستخراج ({extractionImages.length})
-            </h3>
-            <div className="flex gap-2">
-              <button 
-                onClick={() => setExtractionImages([])}
-                className="text-stone-500 text-sm hover:underline"
-              >
-                إلغاء الكل
-              </button>
-              <button 
-                onClick={handleExtract}
-                disabled={isExtracting}
-                className="bg-emerald-600 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
-              >
-                {isExtracting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
-                بدء الاستخراج الذكي
-              </button>
-            </div>
-          </div>
-          <div className="flex gap-4 overflow-x-auto pb-2">
-            {extractionImages.map((img, i) => (
-              <div key={i} className="relative flex-shrink-0">
-                <img src={img} alt="" className="w-24 h-24 object-cover rounded-xl border border-emerald-200" crossOrigin="anonymous" />
+          {extractionMode === 'single' ? (
+            <>
+              <div className="flex items-center justify-between">
+                <h3 className="text-emerald-800 font-bold flex items-center gap-2">
+                  <ImageIcon className="w-5 h-5" />
+                  صور جاهزة للاستخراج ({extractionImages.length})
+                </h3>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => { setExtractionImages([]); setExtractionMode(null); }}
+                    className="text-stone-500 text-sm hover:underline"
+                  >
+                    إلغاء الكل
+                  </button>
+                  <button 
+                    onClick={handleExtract}
+                    disabled={isExtracting}
+                    className="bg-emerald-600 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {isExtracting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                    بدء الاستخراج الذكي (أسئلة فقط)
+                  </button>
+                </div>
+              </div>
+              <div className="flex gap-4 overflow-x-auto pb-2">
+                {extractionImages.map((img, i) => (
+                  <div key={i} className="relative flex-shrink-0">
+                    <img src={img} alt="" className="w-24 h-24 object-cover rounded-xl border border-emerald-200" crossOrigin="anonymous" />
+                    <button 
+                      onClick={() => setExtractionImages(prev => prev.filter((_, idx) => idx !== i))}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg"
+                    >
+                      <XCircle className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-emerald-800 font-bold flex items-center gap-2">
+                  <Layers className="w-5 h-5" />
+                  استخراج الأسئلة والأجوبة معاً
+                </h3>
                 <button 
-                  onClick={() => setExtractionImages(prev => prev.filter((_, idx) => idx !== i))}
-                  className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg"
+                  onClick={() => { setExtractionMode(null); setDualQImages([]); setDualAImages([]); }}
+                  className="text-stone-500 text-sm hover:underline"
                 >
-                  <XCircle className="w-4 h-4" />
+                  إلغاء
                 </button>
               </div>
-            ))}
-          </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Questions Box */}
+                <div className="bg-white p-4 rounded-2xl border-2 border-dashed border-stone-200 hover:border-emerald-300 transition-colors cursor-pointer" onClick={() => dualQInputRef.current?.click()}>
+                  <div className="text-center space-y-2 mb-4">
+                    <Plus className="w-6 h-6 mx-auto text-stone-400" />
+                    <p className="font-bold text-stone-600">صور الأسئلة</p>
+                    <p className="text-[10px] text-stone-400">({dualQImages.length} صور محملة)</p>
+                  </div>
+                  <div className="flex gap-2 flex-wrap justify-center">
+                    {dualQImages.map((img, i) => (
+                      <img key={i} src={img} className="w-12 h-12 object-cover rounded-lg border border-stone-100" />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Answers Box */}
+                <div className="bg-white p-4 rounded-2xl border-2 border-dashed border-stone-200 hover:border-emerald-300 transition-colors cursor-pointer" onClick={() => dualAInputRef.current?.click()}>
+                  <div className="text-center space-y-2 mb-4">
+                    <Plus className="w-6 h-6 mx-auto text-stone-400" />
+                    <p className="font-bold text-stone-600">صور الأجوبة النموذجية</p>
+                    <p className="text-[10px] text-stone-400">({dualAImages.length} صور محملة)</p>
+                  </div>
+                  <div className="flex gap-2 flex-wrap justify-center">
+                    {dualAImages.map((img, i) => (
+                      <img key={i} src={img} className="w-12 h-12 object-cover rounded-lg border border-stone-100" />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                onClick={handleExtract}
+                disabled={isExtracting || dualQImages.length === 0 || dualAImages.length === 0}
+                className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {isExtracting ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle className="w-5 h-5" />}
+                بدء استخراج الأسئلة والأجوبة معاً
+              </button>
+            </div>
+          )}
         </motion.div>
       )}
 
@@ -1789,7 +1913,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
 
         {/* Official Exam Header for PDF (Questions Only) */}
         <div className="fixed left-[-9999px] top-0 w-[210mm] pdf-export-container" ref={examPrintRef}>
-          <div className="p-12 bg-white space-y-8 text-right" dir="rtl">
+          <div className="px-[20mm] py-[25mm] bg-white space-y-8 text-right" dir="rtl" style={{ boxSizing: 'border-box' }}>
             <div className="flex justify-between items-start border-b-2 border-stone-900 pb-6">
               <div className="space-y-1">
                 <p className="font-bold text-lg">وزارة التربية</p>
@@ -1822,6 +1946,13 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                   </div>
                   {q.questionImage && <img src={q.questionImage} className="max-h-64 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
                   
+                  {q.answer && (
+                    <div className="text-emerald-700 bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 mb-6">
+                      <p className="font-bold mb-1 underline">الإجابة النموذجية:</p>
+                      <p className="whitespace-pre-wrap">{q.answer}</p>
+                    </div>
+                  )}
+
                   <div className="mr-6 space-y-4">
                     {q.subQuestions?.map((sq, sqIdx) => (
                       <div key={sq.id} className="space-y-4">
@@ -1834,11 +1965,26 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                         </div>
                         {sq.questionImage && <img src={sq.questionImage} className="max-h-48 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
                         
+                        {sq.answer && (
+                          <div className="text-sm text-stone-500 border-r-2 border-stone-100 pr-3 mr-2 mb-4">
+                            <span className="font-bold">الجواب: </span>
+                            <span>{sq.answer}</span>
+                          </div>
+                        )}
+                        
                         <div className="mr-6 space-y-4">
                           {sq.subQuestions?.map((ssq, ssqIdx) => (
-                            <div key={ssq.id} className="flex justify-between text-sm">
-                              <p className="leading-relaxed">{ssqIdx + 1}- {ssq.text}</p>
-                              <span>({ssq.grade} درجة)</span>
+                            <div key={ssq.id} className="space-y-2">
+                              <div className="flex justify-between text-sm">
+                                <p className="leading-relaxed">{ssqIdx + 1}- {ssq.text}</p>
+                                <span>({ssq.grade} درجة)</span>
+                              </div>
+                              {ssq.answer && (
+                                <div className="text-xs text-stone-500 border-r-2 border-stone-100 pr-3 mr-2">
+                                  <span className="font-bold">الجواب: </span>
+                                  <span>{ssq.answer}</span>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -1853,7 +1999,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
 
         {/* Full Exam Preview for PDF (Questions & Answers) */}
         <div className="fixed left-[-9999px] top-0 w-[210mm] pdf-export-container" ref={examFullPrintRef}>
-          <div className="p-12 bg-white space-y-8 text-right" dir="rtl">
+          <div className="px-[20mm] py-[25mm] bg-white space-y-8 text-right" dir="rtl" style={{ boxSizing: 'border-box' }}>
             <h2 className="text-3xl font-bold text-center border-b-4 border-stone-900 pb-4">نموذج الأسئلة والأجوبة النموذجية</h2>
             <div className="grid grid-cols-2 gap-4 text-lg border-b pb-4">
               <p><span className="font-bold">المادة:</span> {title}</p>
