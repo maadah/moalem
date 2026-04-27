@@ -469,10 +469,19 @@ function App() {
   const [pendingCount, setPendingCount] = useState(0);
 
   useEffect(() => {
-    if (!user || (userProfile?.role !== 'admin' && user.email !== 'asmaomar5566@gmail.com')) {
+    if (!user) {
       setPendingCount(0);
       return;
     }
+    
+    const isAdminEmail = user.email?.toLowerCase().trim() === 'asmaomar5566@gmail.com';
+    const isAdminRole = userProfile?.role === 'admin';
+    
+    if (!isAdminEmail && !isAdminRole) {
+      setPendingCount(0);
+      return;
+    }
+
     const q = query(collection(db, 'users'), where('status', '==', 'pending'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setPendingCount(snapshot.size);
@@ -502,14 +511,26 @@ function App() {
           const userDoc = await getDoc(userDocRef);
           
           if (userDoc.exists()) {
-            setUserProfile(userDoc.data() as UserProfile);
+            const data = userDoc.data() as UserProfile;
+            const isAdminEmail = u.email?.toLowerCase().trim() === 'asmaomar5566@gmail.com';
+            
+            if (isAdminEmail && (data.status !== 'approved' || data.role !== 'admin')) {
+              await updateDoc(userDocRef, {
+                status: 'approved',
+                role: 'admin'
+              });
+              data.status = 'approved';
+              data.role = 'admin';
+            }
+            setUserProfile(data);
           } else {
+            const isAdminEmail = u.email?.toLowerCase().trim() === 'asmaomar5566@gmail.com';
             const newProfile: UserProfile = {
               uid: u.uid,
               email: u.email || '',
               displayName: u.displayName || '',
-              status: u.email === 'asmaomar5566@gmail.com' ? 'approved' : 'pending',
-              role: u.email === 'asmaomar5566@gmail.com' ? 'admin' : 'user',
+              status: isAdminEmail ? 'approved' : 'pending',
+              role: isAdminEmail ? 'admin' : 'user',
               pageLimit: 100,
               pagesUsed: 0,
               questionsCount: 0,
@@ -714,11 +735,11 @@ function App() {
               <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<LayoutGrid className="w-4 h-4" />} label="لوحة التحكم" />
               <NavButton active={view === 'create-exam'} onClick={() => setView('create-exam')} icon={<Plus className="w-4 h-4" />} label="إنشاء امتحان" />
               <NavButton active={view === 'results'} onClick={() => setView('results')} icon={<List className="w-4 h-4" />} label="النتائج" />
-              {(userProfile?.role === 'admin' || user.email === 'asmaomar5566@gmail.com') && (
+              {(userProfile?.role === 'admin' || user.email?.toLowerCase().trim() === 'asmaomar5566@gmail.com') && (
                 <div className="relative">
                   <NavButton active={view === 'admin'} onClick={() => setView('admin')} icon={<Users className="w-4 h-4" />} label="الإدارة" />
                   {pendingCount > 0 && (
-                    <span className="absolute -top-1 -left-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-bounce shadow-sm">
+                    <span className="absolute -top-1 -left-1 w-5 h-5 bg-red-600 text-white text-[10px] font-black rounded-full flex items-center justify-center animate-bounce shadow-lg ring-2 ring-white">
                       {pendingCount}
                     </span>
                   )}
@@ -856,22 +877,6 @@ function AdminDashboard() {
     });
     return () => unsubscribe();
   }, []);
-
-  const formatDateTime = (timestamp: any) => {
-    if (!timestamp) return 'غير متوفر';
-    try {
-      const date = timestamp.seconds ? new Date(timestamp.seconds * 1000) : (timestamp.toDate ? timestamp.toDate() : new Date(timestamp));
-      return date.toLocaleDateString('ar-IQ', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch (e) {
-      return 'تاريخ غير صالح';
-    }
-  };
 
   const updateUserStatus = async (uid: string, status: 'approved' | 'rejected') => {
     try {
