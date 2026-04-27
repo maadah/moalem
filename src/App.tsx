@@ -497,7 +497,7 @@ function App() {
               displayName: u.displayName || '',
               status: u.email === 'asmaomar5566@gmail.com' ? 'approved' : 'pending',
               role: u.email === 'asmaomar5566@gmail.com' ? 'admin' : 'user',
-              pageLimit: 500,
+              pageLimit: 100,
               pagesUsed: 0,
               questionsCount: 0,
               gradingsCount: 0,
@@ -956,15 +956,14 @@ function AdminDashboard() {
                   <td className="px-6 py-4 text-sm font-medium text-stone-600">{u.questionsCount || 0}</td>
                   <td className="px-6 py-4 text-sm font-medium text-stone-600">{u.gradingsCount || 0}</td>
                   <td className="px-6 py-4">
-                    <select 
+                    <input 
+                      type="number"
+                      step="50"
+                      min="100"
                       value={u.pageLimit}
                       onChange={(e) => updateUserLimit(u.uid, Number(e.target.value))}
-                      className="bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-200 text-xs outline-none focus:ring-2 focus:ring-emerald-500"
-                    >
-                      {[500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 10000].map(val => (
-                        <option key={val} value={val}>{val}</option>
-                      ))}
-                    </select>
+                      className="w-24 bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-200 text-xs outline-none focus:ring-2 focus:ring-emerald-500 text-center"
+                    />
                   </td>
                   <td className="px-6 py-4">
                     <button 
@@ -1032,15 +1031,14 @@ function AdminDashboard() {
                 </div>
                 <div className="w-24">
                   <p className="text-[10px] text-stone-400 mb-1">الحد</p>
-                  <select 
+                  <input 
+                    type="number"
+                    step="50"
+                    min="100"
                     value={u.pageLimit}
                     onChange={(e) => updateUserLimit(u.uid, Number(e.target.value))}
                     className="w-full bg-stone-50 px-2 py-1 rounded-lg border border-stone-200 text-xs outline-none"
-                  >
-                    {[500, 1000, 1500, 2000, 5000].map(val => (
-                      <option key={val} value={val}>{val}</option>
-                    ))}
-                  </select>
+                  />
                 </div>
               </div>
             </div>

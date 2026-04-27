@@ -119,7 +119,7 @@ service cloud.firestore {
                       (request.resource.data.status == 'pending' && 
                        request.resource.data.role == 'user')
                     ) &&
-                    request.resource.data.pageLimit == 500 &&
+                    request.resource.data.pageLimit == 100 &&
                     request.resource.data.pagesUsed == 0;
       allow update: if isAdmin() || (isOwner(userId) && 
                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pagesUsed', 'displayName']));
