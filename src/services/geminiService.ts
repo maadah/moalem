@@ -23,53 +23,82 @@ export interface GradingResult {
   pageIndex?: number;
 }
 
-const getApiKey = () => {
+const getApiKeys = () => {
+  const keys: string[] = [];
+  
   const urlParams = new URLSearchParams(window.location.search);
   const urlKey = urlParams.get('key');
   if (urlKey) {
-    localStorage.setItem('GEMINI_API_KEY_AUTO', urlKey);
-    window.history.replaceState({}, document.title, window.location.pathname);
-    return urlKey;
+    keys.push(urlKey);
   }
 
-  const envKey = import.meta.env.VITE_GEMINI_API_KEY || 
-                 (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '') ||
-                 (typeof process !== 'undefined' ? process.env.VITE_GEMINI_API_KEY : '');
+  const primaryKey = import.meta.env.VITE_GEMINI_API_KEY || 
+                    (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '') ||
+                    (typeof process !== 'undefined' ? process.env.VITE_GEMINI_API_KEY : '');
   
-  if (envKey && envKey !== 'undefined' && envKey !== 'null' && envKey !== '') {
-    return envKey;
+  if (primaryKey && primaryKey !== 'undefined' && primaryKey !== 'null' && primaryKey !== '') {
+    keys.push(primaryKey);
   }
 
-  return localStorage.getItem('GEMINI_API_KEY_AUTO') || '';
+  const secondaryKey = import.meta.env.VITE_GEMINI_API_KEY_SECONDARY || 
+                      (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY_SECONDARY : '') ||
+                      (typeof process !== 'undefined' ? process.env.VITE_GEMINI_API_KEY_SECONDARY : '');
+
+  if (secondaryKey && secondaryKey !== 'undefined' && secondaryKey !== 'null' && secondaryKey !== '') {
+    keys.push(secondaryKey);
+  }
+
+  const localKey = localStorage.getItem('GEMINI_API_KEY_AUTO');
+  if (localKey && !keys.includes(localKey)) {
+    keys.push(localKey);
+  }
+
+  return keys.length > 0 ? keys : [''];
 };
 
 async function retryWithBackoff<T>(
-  fn: () => Promise<T>,
-  maxRetries: number = 5,
+  fn: (apiKey: string) => Promise<T>,
+  maxRetries: number = 3,
   initialDelay: number = 2000
 ): Promise<T> {
+  const apiKeys = getApiKeys();
   let lastError: any;
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      return await fn();
-    } catch (error: any) {
-      lastError = error;
-      const errorMsg = error.message || "";
-      const isRetryable = 
-        errorMsg.includes('503') || 
-        errorMsg.includes('500') || 
-        errorMsg.includes('429') || 
-        errorMsg.includes('quota') ||
-        errorMsg.includes('limit') ||
-        errorMsg.includes('high demand') ||
-        errorMsg.includes('RESOURCE_EXHAUSTED') ||
-        errorMsg.includes('UNAVAILABLE');
+  
+  // Try each API key
+  for (const apiKey of apiKeys) {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        return await fn(apiKey);
+      } catch (error: any) {
+        lastError = error;
+        const errorMsg = error.message || "";
+        
+        // If it's a quota error, we should try the NEXT API key immediately
+        const isQuotaError = errorMsg.includes('429') || 
+                            errorMsg.includes('quota') ||
+                            errorMsg.includes('RESOURCE_EXHAUSTED');
 
-      if (!isRetryable || i === maxRetries - 1) throw error;
-      
-      const delay = initialDelay * Math.pow(2, i);
-      console.warn(`Retryable error occurred (attempt ${i + 1}/${maxRetries}). Retrying in ${delay}ms...`, errorMsg);
-      await new Promise(resolve => setTimeout(resolve, delay));
+        if (isQuotaError) {
+          console.warn(`Quota exceeded for an API key. Switching to next key...`);
+          break; // Break internal retry loop to switch key
+        }
+
+        const isRetryable = 
+          errorMsg.includes('503') || 
+          errorMsg.includes('500') || 
+          errorMsg.includes('high demand') ||
+          errorMsg.includes('UNAVAILABLE');
+
+        if (!isRetryable || i === maxRetries - 1) {
+          // If not retryable or last attempt for this key, and not a quota error
+          // we might want to try the next key anyway as a last resort
+          break; 
+        }
+        
+        const delay = initialDelay * Math.pow(2, i);
+        console.warn(`Retryable error occurred (attempt ${i + 1}/${maxRetries}). Retrying in ${delay}ms...`, errorMsg);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
   }
   throw lastError;
@@ -132,9 +161,8 @@ function robustJsonParse(text: string): any {
 export async function extractExamFromDualImages(
   questionImages: string[],
   answerImages: string[],
-  apiKey: string
+  apiKey?: string // API key is optional now as we use rotation inside
 ): Promise<{ title: string, questions: Question[], requiredQuestionsCount?: number }> {
-  const ai = new GoogleGenAI({ apiKey });
   const prompt = `
     You are an expert at reading Arabic Iraqi school exam papers AND their model answers. 
     You are provided with two sets of images:
@@ -178,60 +206,63 @@ export async function extractExamFromDualImages(
     return { inlineData: { data: compressedData, mimeType: "image/jpeg" } };
   }));
 
-  const response = await retryWithBackoff(() => ai.models.generateContent({
-    model: "gemini-3.1-pro-preview", 
-    contents: [
-      { text: "QUESTION IMAGES:" },
-      ...qImageParts,
-      { text: "ANSWER IMAGES:" },
-      ...aImageParts,
-      { text: prompt }
-    ],
-    config: {
-      systemInstruction: `You are a professional teacher. Match questions to answers with perfect accuracy. 
-      Arabic text must be preserved exactly. Ensure the 3-level hierarchy is strictly followed.`,
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: "OBJECT",
-        required: ["questions"],
-        properties: {
-          title: { type: "STRING" },
-          requiredQuestionsCount: { type: "NUMBER" },
-          questions: {
-            type: "ARRAY",
-            items: {
-              type: "OBJECT",
-              required: ["id", "text", "type", "subStyle"],
-              properties: {
-                id: { type: "STRING" },
-                text: { type: "STRING" },
-                answer: { type: "STRING" },
-                grade: { type: "NUMBER" },
-                type: { type: "STRING" },
-                subStyle: { type: "STRING", enum: ["numbers", "letters"] },
-                subQuestions: {
-                  type: "ARRAY",
-                  items: {
-                    type: "OBJECT",
-                    required: ["id", "text", "type", "subStyle"],
-                    properties: {
-                      id: { type: "STRING" },
-                      text: { type: "STRING" },
-                      answer: { type: "STRING" },
-                      grade: { type: "NUMBER" },
-                      type: { type: "STRING" },
-                      subStyle: { type: "STRING", enum: ["numbers", "letters"] },
-                      subQuestions: {
-                        type: "ARRAY",
-                        items: {
-                          type: "OBJECT",
-                          required: ["id", "text", "type"],
-                          properties: {
-                            id: { type: "STRING" },
-                            text: { type: "STRING" },
-                            answer: { type: "STRING" },
-                            grade: { type: "NUMBER" },
-                            type: { type: "STRING" }
+  const response = await retryWithBackoff((currentKey) => {
+    const ai = new GoogleGenAI({ apiKey: currentKey });
+    return ai.models.generateContent({
+      model: "gemini-3.1-pro-preview", 
+      contents: [
+        { text: "QUESTION IMAGES:" },
+        ...qImageParts,
+        { text: "ANSWER IMAGES:" },
+        ...aImageParts,
+        { text: prompt }
+      ],
+      config: {
+        systemInstruction: `You are a professional teacher. Match questions to answers with perfect accuracy. 
+        Arabic text must be preserved exactly. Ensure the 3-level hierarchy is strictly followed.`,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          required: ["questions"],
+          properties: {
+            title: { type: "STRING" },
+            requiredQuestionsCount: { type: "NUMBER" },
+            questions: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                required: ["id", "text", "type", "subStyle"],
+                properties: {
+                  id: { type: "STRING" },
+                  text: { type: "STRING" },
+                  answer: { type: "STRING" },
+                  grade: { type: "NUMBER" },
+                  type: { type: "STRING" },
+                  subStyle: { type: "STRING", enum: ["numbers", "letters"] },
+                  subQuestions: {
+                    type: "ARRAY",
+                    items: {
+                      type: "OBJECT",
+                      required: ["id", "text", "type", "subStyle"],
+                      properties: {
+                        id: { type: "STRING" },
+                        text: { type: "STRING" },
+                        answer: { type: "STRING" },
+                        grade: { type: "NUMBER" },
+                        type: { type: "STRING" },
+                        subStyle: { type: "STRING", enum: ["numbers", "letters"] },
+                        subQuestions: {
+                          type: "ARRAY",
+                          items: {
+                            type: "OBJECT",
+                            required: ["id", "text", "type"],
+                            properties: {
+                              id: { type: "STRING" },
+                              text: { type: "STRING" },
+                              answer: { type: "STRING" },
+                              grade: { type: "NUMBER" },
+                              type: { type: "STRING" }
+                            }
                           }
                         }
                       }
@@ -243,8 +274,8 @@ export async function extractExamFromDualImages(
           }
         }
       }
-    }
-  }));
+    });
+  });
 
   const text = response.text || '';
   let parsed = robustJsonParse(text);
@@ -254,8 +285,8 @@ export async function extractExamFromDualImages(
   return parsed || { title: "", questions: [] };
 }
 
-export async function extractExamFromImages(base64Images: string[], apiKey: string): Promise<{ title: string, questions: Question[], requiredQuestionsCount?: number }> {
-  const ai = new GoogleGenAI({ apiKey });
+export async function extractExamFromImages(base64Images: string[], apiKey?: string): Promise<{ title: string, questions: Question[], requiredQuestionsCount?: number }> {
+  // We ignore the passed apiKey if we have multiple keys to rotate from environment
   const prompt = `
     You are an expert at reading Arabic Iraqi school exam papers. Analyze the provided image(s) and extract ALL questions into a structured JSON.
 
@@ -297,89 +328,92 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
     };
   }));
 
-  const response = await retryWithBackoff(() => ai.models.generateContent({
-    model: "gemini-3.1-pro-preview", // Upgraded to Pro for complex hierarchy reasoning
-    contents: [
-      ...imageParts,
-      { text: prompt }
-    ],
-    config: {
-      systemInstruction: `You are a high-end Iraqi Exam Digitization Expert. Your mission is to deconstruct math papers with 100% architectural accuracy.
-      
-      STRICT HIERARCHY (3 LEVELS):
-      1. Main Question (س1, س2...): The root container.
-         - 'text': Should be ONLY the label (e.g., "س1"). If there is a global instruction like "أجب عن خمسة أسئلة", it goes into the overall 'title' field.
-         - 'subStyle': ALWAYS "letters".
-      2. Branch (أ، ب، ج...): The sub-section.
-         - 'text': Use the instruction text (e.g., "جد ناتج ما يلي :") or the standalone question text.
-         - 'subStyle': ALWAYS "numbers" (even if it currently has no sub-questions, for future consistency).
-         - Labels like "أ/" or "ب/" MUST NOT be included in the 'text'.
-      3. Point (1, 2, 3...): The specific math problems or multiple choice items.
-         - 'text': The actual problem (e.g., "5 + 5"). Labels like "1-" MUST NOT be in the 'text'.
-         - 'subQuestions': MUST be empty. Never nest deeper than this.
-
-      CRITICAL CLEANING RULES:
-      1. If a Question has branches (أ، ب), it MUST be Level 1.
-      2. If a Branch has sub-items (1, 2, 3), it MUST have those items as Level 3 subQuestions.
-      3. If a question is just "س1/أ/ 5+5", then Level 1 is "س1", and Level 2 is "5+5" (with empty subQuestions).
-      4. STICKY HIERARCHY: Do not start a new Main Question (س2) when you see branch "ب/". Ensure all branches (أ، ب، ج) are siblings under the same parent Question.
-      5. NO HALUCINATIONS: Do not invent numbering. If the paper says "أ", use Level 2. If it says "1", use Level 3.
-
-      CRITICAL CONSTRAINTS:
-      - NO NESTED POINTS: A point (Level 3) cannot have subQuestions. It is a leaf node.
-      - STICKY BRANCHES: Every Branch (أ, ب, ج..) belongs to the LAST mentioned Question (س1, س2..).
-      - PRECISE GRADES: Map grades (درجة) to numeric 'grade' field. Ignore placeholders like "00001".
-      - MAPPING EXAMPLE:
-        "س1 / أ / جد ناتج ما يلي : 1- 5+5 2- 6+6" 
-        Should become:
-        { "text": "س1", "subStyle": "letters", "subQuestions": [
-            { "text": "جد ناتج ما يلي :", "subStyle": "numbers", "subQuestions": [
-                { "text": "5+5" }, { "text": "6+6" }
-            ]}
-        ]}
-      - VALIDATION: Ensure the hierarchy matches the paper. If "ب" is in the paper, it's a subQuestion of the same "س" as "أ".`,
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: "OBJECT",
-        required: ["questions"],
-        properties: {
-          title: { type: "STRING" },
-          requiredQuestionsCount: { type: "NUMBER" },
-          questions: {
-            type: "ARRAY",
-            items: {
-              type: "OBJECT",
-              required: ["id", "text", "type", "subStyle"],
-              properties: {
-                id: { type: "STRING" },
-                text: { type: "STRING" },
-                answer: { type: "STRING" },
-                grade: { type: "NUMBER" },
-                type: { type: "STRING" },
-                subStyle: { type: "STRING", enum: ["numbers", "letters"] },
-                subQuestions: {
-                  type: "ARRAY",
-                  items: {
-                    type: "OBJECT",
-                    required: ["id", "text", "type", "subStyle"],
-                    properties: {
-                      id: { type: "STRING" },
-                      text: { type: "STRING" },
-                      answer: { type: "STRING" },
-                      grade: { type: "NUMBER" },
-                      type: { type: "STRING" },
-                      subStyle: { type: "STRING", enum: ["numbers", "letters"] },
-                      subQuestions: { // Added Level 3
-                        type: "ARRAY",
-                        items: {
-                          type: "OBJECT",
-                          required: ["id", "text", "type"],
-                          properties: {
-                            id: { type: "STRING" },
-                            text: { type: "STRING" },
-                            answer: { type: "STRING" },
-                            grade: { type: "NUMBER" },
-                            type: { type: "STRING" }
+  const response = await retryWithBackoff((currentKey) => {
+    const ai = new GoogleGenAI({ apiKey: currentKey });
+    return ai.models.generateContent({
+      model: "gemini-3.1-pro-preview", // Upgraded to Pro for complex hierarchy reasoning
+      contents: [
+        ...imageParts,
+        { text: prompt }
+      ],
+      config: {
+        systemInstruction: `You are a high-end Iraqi Exam Digitization Expert. Your mission is to deconstruct math papers with 100% architectural accuracy.
+        
+        STRICT HIERARCHY (3 LEVELS):
+        1. Main Question (س1, س2...): The root container.
+           - 'text': Should be ONLY the label (e.g., "س1"). If there is a global instruction like "أجب عن خمسة أسئلة", it goes into the overall 'title' field.
+           - 'subStyle': ALWAYS "letters".
+        2. Branch (أ، ب، ج...): The sub-section.
+           - 'text': Use the instruction text (e.g., "جد ناتج ما يلي :") or the standalone question text.
+           - 'subStyle': ALWAYS "numbers" (even if it currently has no sub-questions, for future consistency).
+           - Labels like "أ/" or "ب/" MUST NOT be included in the 'text'.
+        3. Point (1, 2, 3...): The specific math problems or multiple choice items.
+           - 'text': The actual problem (e.g., "5 + 5"). Labels like "1-" MUST NOT be in the 'text'.
+           - 'subQuestions': MUST be empty. Never nest deeper than this.
+  
+        CRITICAL CLEANING RULES:
+        1. If a Question has branches (أ، ب), it MUST be Level 1.
+        2. If a Branch has sub-items (1, 2, 3), it MUST have those items as Level 3 subQuestions.
+        3. If a question is just "س1/أ/ 5+5", then Level 1 is "س1", and Level 2 is "5+5" (with empty subQuestions).
+        4. STICKY HIERARCHY: Do not start a new Main Question (س2) when you see branch "ب/". Ensure all branches (أ، ب، ج) are siblings under the same parent Question.
+        5. NO HALUCINATIONS: Do not invent numbering. If the paper says "أ", use Level 2. If it says "1", use Level 3.
+  
+        CRITICAL CONSTRAINTS:
+        - NO NESTED POINTS: A point (Level 3) cannot have subQuestions. It is a leaf node.
+        - STICKY BRANCHES: Every Branch (أ, ب, ج..) belongs to the LAST mentioned Question (س1, س2..).
+        - PRECISE GRADES: Map grades (درجة) to numeric 'grade' field. Ignore placeholders like "00001".
+        - MAPPING EXAMPLE:
+          "س1 / أ / جد ناتج ما يلي : 1- 5+5 2- 6+6" 
+          Should become:
+          { "text": "س1", "subStyle": "letters", "subQuestions": [
+              { "text": "جد ناتج ما يلي :", "subStyle": "numbers", "subQuestions": [
+                  { "text": "5+5" }, { "text": "6+6" }
+              ]}
+          ]}
+        - VALIDATION: Ensure the hierarchy matches the paper. If "ب" is in the paper, it's a subQuestion of the same "س" as "أ".`,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          required: ["questions"],
+          properties: {
+            title: { type: "STRING" },
+            requiredQuestionsCount: { type: "NUMBER" },
+            questions: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                required: ["id", "text", "type", "subStyle"],
+                properties: {
+                  id: { type: "STRING" },
+                  text: { type: "STRING" },
+                  answer: { type: "STRING" },
+                  grade: { type: "NUMBER" },
+                  type: { type: "STRING" },
+                  subStyle: { type: "STRING", enum: ["numbers", "letters"] },
+                  subQuestions: {
+                    type: "ARRAY",
+                    items: {
+                      type: "OBJECT",
+                      required: ["id", "text", "type", "subStyle"],
+                      properties: {
+                        id: { type: "STRING" },
+                        text: { type: "STRING" },
+                        answer: { type: "STRING" },
+                        grade: { type: "NUMBER" },
+                        type: { type: "STRING" },
+                        subStyle: { type: "STRING", enum: ["numbers", "letters"] },
+                        subQuestions: { // Added Level 3
+                          type: "ARRAY",
+                          items: {
+                            type: "OBJECT",
+                            required: ["id", "text", "type"],
+                            properties: {
+                              id: { type: "STRING" },
+                              text: { type: "STRING" },
+                              answer: { type: "STRING" },
+                              grade: { type: "NUMBER" },
+                              type: { type: "STRING" }
+                            }
                           }
                         }
                       }
@@ -391,8 +425,8 @@ export async function extractExamFromImages(base64Images: string[], apiKey: stri
           }
         }
       }
-    }
-  }));
+    });
+  });
 
   const text = response.text || '';
   let parsed = robustJsonParse(text);
@@ -566,10 +600,6 @@ export async function gradeStudentPaper(
     return compressed;
   }));
 
-  const apiKey = getApiKey();
-  if (!apiKey) throw new Error("API Key missing");
-  const ai = new GoogleGenAI({ apiKey });
-
   const flattenedQuestions: any[] = [];
   const leafQuestionIds = new Set<string>();
 
@@ -596,47 +626,50 @@ export async function gradeStudentPaper(
     Required: ${requiredQuestionsCount}
     Use IDs exactly. Feedback in Arabic.`;
 
-  const response = await retryWithBackoff(() => ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: [
-      ...base64Images.map(data => ({ inlineData: { data, mimeType: "image/jpeg" } })),
-      { text: prompt }
-    ],
-    config: {
-      systemInstruction: "You are a professional Arabic teacher. Grading must be consistent and fair. Use only provided IDs.",
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: "OBJECT",
-        properties: {
-          results: {
-            type: "ARRAY",
-            items: {
-              type: "OBJECT",
-              properties: {
-                studentName: { type: "STRING" },
-                gradings: {
-                  type: "ARRAY",
-                  items: {
-                    type: "OBJECT",
-                    properties: {
-                      questionId: { type: "STRING" },
-                      studentAnswer: { type: "STRING" },
-                      grade: { type: "NUMBER" },
-                      feedback: { type: "STRING" },
-                      box: { type: "ARRAY", items: { type: "NUMBER" } },
-                      pageIndex: { type: "NUMBER" }
+  const response = await retryWithBackoff((currentKey) => {
+    const ai = new GoogleGenAI({ apiKey: currentKey });
+    return ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [
+        ...base64Images.map(data => ({ inlineData: { data, mimeType: "image/jpeg" } })),
+        { text: prompt }
+      ],
+      config: {
+        systemInstruction: "You are a professional Arabic teacher. Grading must be consistent and fair. Use only provided IDs.",
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            results: {
+              type: "ARRAY",
+              items: {
+                type: "OBJECT",
+                properties: {
+                  studentName: { type: "STRING" },
+                  gradings: {
+                    type: "ARRAY",
+                    items: {
+                      type: "OBJECT",
+                      properties: {
+                        questionId: { type: "STRING" },
+                        studentAnswer: { type: "STRING" },
+                        grade: { type: "NUMBER" },
+                        feedback: { type: "STRING" },
+                        box: { type: "ARRAY", items: { type: "NUMBER" } },
+                        pageIndex: { type: "NUMBER" }
+                      }
                     }
-                  }
-                },
-                totalGrade: { type: "NUMBER" }
+                  },
+                  totalGrade: { type: "NUMBER" }
+                }
               }
             }
           }
-        }
-      },
-      temperature: 0.1
-    }
-  }));
+        },
+        temperature: 0.1
+      }
+    });
+  });
 
   const text = response.text || '';
   const parsed = robustJsonParse(text);
