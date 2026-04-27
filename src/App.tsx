@@ -112,6 +112,8 @@ interface UserProfile {
   status: 'pending' | 'approved' | 'rejected';
   role: 'admin' | 'user';
   pageLimit: number;
+  questionsCount: number;
+  gradingsCount: number;
   pagesUsed: number;
   createdAt: any;
 }
@@ -861,7 +863,7 @@ function AdminDashboard() {
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-8"
+      className="space-y-6 md:space-y-8 pb-10"
     >
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <h2 className="text-2xl md:text-3xl font-bold font-serif italic">لوحة تحكم المدير</h2>
@@ -878,26 +880,26 @@ function AdminDashboard() {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {pendingUsers.map(u => (
-              <div key={u.uid} className="bg-white p-6 rounded-3xl border border-amber-200 shadow-sm flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-stone-100 rounded-full flex items-center justify-center font-bold text-stone-400">
+              <div key={u.uid} className="bg-white p-6 rounded-3xl border border-amber-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="flex items-center gap-4 w-full">
+                  <div className="w-12 h-12 bg-stone-100 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-stone-400">
                     {u.displayName?.charAt(0) || u.email.charAt(0)}
                   </div>
-                  <div>
-                    <p className="font-bold">{u.displayName || 'بدون اسم'}</p>
-                    <p className="text-xs text-stone-400">{u.email}</p>
+                  <div className="min-w-0">
+                    <p className="font-bold truncate">{u.displayName || 'بدون اسم'}</p>
+                    <p className="text-xs text-stone-400 truncate">{u.email}</p>
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full sm:w-auto">
                   <button 
                     onClick={() => updateUserStatus(u.uid, 'approved')}
-                    className="bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors"
+                    className="flex-1 sm:flex-none bg-emerald-600 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors"
                   >
                     قبول
                   </button>
                   <button 
                     onClick={() => updateUserStatus(u.uid, 'rejected')}
-                    className="bg-red-50 text-red-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-red-100 transition-colors"
+                    className="flex-1 sm:flex-none bg-red-50 text-red-600 px-6 py-2 rounded-xl text-sm font-bold hover:bg-red-100 transition-colors"
                   >
                     رفض
                   </button>
@@ -910,13 +912,17 @@ function AdminDashboard() {
 
       <div className="space-y-4">
         <h3 className="text-xl font-bold">المستخدمين النشطين</h3>
-        <div className="bg-white rounded-3xl border border-stone-200 overflow-hidden shadow-sm">
+        
+        {/* Desktop Table */}
+        <div className="hidden lg:block bg-white rounded-3xl border border-stone-200 overflow-hidden shadow-sm">
           <table className="w-full text-right">
             <thead className="bg-stone-50 border-b border-stone-200">
               <tr>
                 <th className="px-6 py-4 text-sm font-bold text-stone-500">المستخدم</th>
-                <th className="px-6 py-4 text-sm font-bold text-stone-500">الاستهلاك</th>
-                <th className="px-6 py-4 text-sm font-bold text-stone-500">الحد المسموح</th>
+                <th className="px-6 py-4 text-sm font-bold text-stone-500">الاستهلاك (صفحات)</th>
+                <th className="px-6 py-4 text-sm font-bold text-stone-500">أسئلة مستخرجة</th>
+                <th className="px-6 py-4 text-sm font-bold text-stone-500">أوراق مصححة</th>
+                <th className="px-6 py-4 text-sm font-bold text-stone-500">الحد</th>
                 <th className="px-6 py-4 text-sm font-bold text-stone-500">الإجراءات</th>
               </tr>
             </thead>
@@ -925,12 +931,12 @@ function AdminDashboard() {
                 <tr key={u.uid} className="hover:bg-stone-50 transition-colors">
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-stone-100 rounded-full flex items-center justify-center text-xs font-bold text-stone-400">
+                      <div className="w-8 h-8 bg-stone-100 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-stone-400">
                         {u.displayName?.charAt(0) || u.email.charAt(0)}
                       </div>
-                      <div>
-                        <p className="text-sm font-bold">{u.displayName || 'بدون اسم'}</p>
-                        <p className="text-[10px] text-stone-400">{u.email}</p>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold truncate">{u.displayName || 'بدون اسم'}</p>
+                        <p className="text-[10px] text-stone-400 truncate">{u.email}</p>
                       </div>
                     </div>
                   </td>
@@ -942,17 +948,19 @@ function AdminDashboard() {
                           style={{ width: `${Math.min(100, (u.pagesUsed / u.pageLimit) * 100)}%` }}
                         />
                       </div>
-                      <span className="text-xs font-bold">{u.pagesUsed} صفحة</span>
+                      <span className="text-xs font-bold">{u.pagesUsed}</span>
                     </div>
                   </td>
+                  <td className="px-6 py-4 text-sm font-medium text-stone-600">{u.questionsCount || 0}</td>
+                  <td className="px-6 py-4 text-sm font-medium text-stone-600">{u.gradingsCount || 0}</td>
                   <td className="px-6 py-4">
                     <select 
                       value={u.pageLimit}
                       onChange={(e) => updateUserLimit(u.uid, Number(e.target.value))}
                       className="bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-200 text-xs outline-none focus:ring-2 focus:ring-emerald-500"
                     >
-                      {[500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 6000, 7000, 8000, 9000, 10000].map(val => (
-                        <option key={val} value={val}>{val} صفحة</option>
+                      {[500, 1000, 1500, 2000, 2500, 3000, 3500, 4000, 4500, 5000, 10000].map(val => (
+                        <option key={val} value={val}>{val}</option>
                       ))}
                     </select>
                   </td>
@@ -966,14 +974,82 @@ function AdminDashboard() {
                   </td>
                 </tr>
               ))}
-              {activeUsers.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-6 py-10 text-center text-stone-400 text-sm italic">لا يوجد مستخدمين نشطين حالياً</td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
+
+        {/* Mobile/Tablet Cards */}
+        <div className="lg:hidden space-y-4">
+          {activeUsers.map(u => (
+            <div key={u.uid} className="bg-white p-5 rounded-3xl border border-stone-200 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-stone-100 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-stone-400">
+                    {u.displayName?.charAt(0) || u.email.charAt(0)}
+                  </div>
+                  <div>
+                    <p className="font-bold text-sm">{u.displayName || 'بدون اسم'}</p>
+                    <p className="text-[10px] text-stone-400">{u.email}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => deleteUser(u.uid)}
+                  className="p-2 text-red-400 hover:bg-red-50 rounded-xl transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 py-3 border-y border-stone-50">
+                <div className="text-center">
+                  <p className="text-[10px] text-stone-400 mb-1">صفحات</p>
+                  <p className="text-sm font-bold text-emerald-600">{u.pagesUsed}</p>
+                </div>
+                <div className="text-center border-x border-stone-100">
+                  <p className="text-[10px] text-stone-400 mb-1">أسئلة</p>
+                  <p className="text-sm font-bold text-stone-700">{u.questionsCount || 0}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[10px] text-stone-400 mb-1">تصحيح</p>
+                  <p className="text-sm font-bold text-stone-700">{u.gradingsCount || 0}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <div className="flex justify-between text-[10px] mb-1">
+                    <span className="text-stone-400">الاستهلاك</span>
+                    <span className="font-bold">{Math.round((u.pagesUsed / u.pageLimit) * 100)}%</span>
+                  </div>
+                  <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden">
+                    <div 
+                      className={cn("h-full", u.pagesUsed / u.pageLimit > 0.9 ? "bg-red-500" : "bg-emerald-500")}
+                      style={{ width: `${Math.min(100, (u.pagesUsed / u.pageLimit) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="w-24">
+                  <p className="text-[10px] text-stone-400 mb-1">الحد</p>
+                  <select 
+                    value={u.pageLimit}
+                    onChange={(e) => updateUserLimit(u.uid, Number(e.target.value))}
+                    className="w-full bg-stone-50 px-2 py-1 rounded-lg border border-stone-200 text-xs outline-none"
+                  >
+                    {[500, 1000, 1500, 2000, 5000].map(val => (
+                      <option key={val} value={val}>{val}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {activeUsers.length === 0 && (
+          <div className="bg-stone-50 p-12 rounded-3xl border border-dashed border-stone-200 text-center text-stone-400 text-sm">
+            لا يوجد مستخدمين نشطين حالياً
+          </div>
+        )}
       </div>
     </motion.div>
   );
@@ -1362,7 +1438,8 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
           const totalPages = extractionMode === 'single' ? extractionImages.length : (dualQImages.length + dualAImages.length);
           try {
             await setDoc(doc(db, 'users', user.uid), {
-              pagesUsed: (userProfile.pagesUsed || 0) + totalPages
+              pagesUsed: (userProfile.pagesUsed || 0) + totalPages,
+              questionsCount: (userProfile.questionsCount || 0) + (result.questions?.length || 0)
             }, { merge: true });
           } catch (e) {
             handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`);
@@ -1524,7 +1601,15 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
   };
 
   const saveExam = async () => {
-    if (!title || questions.length === 0) return alert('يرجى إدخال عنوان الامتحان وسؤال واحد على الأقل');
+    if (!title || questions.length === 0) {
+      if (extractionMode === 'dual' && (dualQImages.length > 0 || dualAImages.length > 0)) {
+        if (dualQImages.length === 0 || dualAImages.length === 0) {
+          alert('يرجى رفع صور الأسئلة والأجوبة معاً لإتمام العملية بنجاح');
+          return;
+        }
+      }
+      return alert('يرجى إدخال عنوان الامتحان وسؤال واحد على الأقل، أو استكمال استخراج الأسئلة من الصور');
+    }
     setIsSaving(true);
     setSavingStatus('جاري التحضير للحفظ...');
     try {
@@ -1595,162 +1680,129 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
         <h2 className="text-2xl md:text-3xl font-bold font-serif italic">
           {initialData ? 'تعديل الامتحان' : 'إنشاء امتحان جديد'}
         </h2>
-        <div className="flex flex-wrap gap-2 md:gap-3">
-          <button 
-            onClick={() => {
-              if (userProfile && (userProfile.pagesUsed + extractionImages.length) > userProfile.pageLimit) {
-                alert(`عذراً، لقد تجاوزت الحد المسموح به من الصفحات (${userProfile.pageLimit}). يرجى التواصل مع الإدارة لزيادة الحد.`);
-                return;
-              }
-              setExtractionMode('single');
-              extractionInputRef.current?.click();
-            }}
-            className="px-6 py-2 rounded-xl bg-stone-100 text-stone-900 flex items-center gap-2 hover:bg-stone-200 transition-all text-sm"
-            title="رفع من الجهاز"
-          >
-            <FileUp className="w-4 h-4" />
-            استخراج من صور (أسئلة)
-          </button>
-          
+        <div className="flex gap-2 w-full md:w-auto">
+          <button onClick={onCancel} className="flex-1 md:flex-none px-6 py-2 rounded-xl text-stone-500 hover:bg-stone-100 transition-colors">إلغاء</button>
+          {questions.length > 0 && (
+            <div className="flex gap-2 flex-grow md:flex-grow-0">
+               <div className="relative">
+                <button 
+                  onClick={() => setShowPrintMenu(!showPrintMenu)}
+                  className="w-full md:w-auto px-4 py-2 rounded-xl bg-stone-100 text-stone-600 flex items-center justify-center gap-2 hover:bg-stone-200 transition-all font-bold text-sm"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span className="hidden sm:inline">تحميل PDF</span>
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showPrintMenu ? 'rotate-180' : ''}`} />
+                </button>
+                {showPrintMenu && (
+                  <div className="absolute top-full left-0 mt-2 bg-white rounded-2xl border border-stone-200 shadow-xl overflow-hidden z-50 w-48">
+                    <button 
+                      onClick={() => { printExam('questions'); setShowPrintMenu(false); }}
+                      className="w-full text-right px-4 py-3 hover:bg-stone-50 transition-colors flex items-center gap-3 border-b border-stone-100 text-sm"
+                    >
+                      <FileText className="w-4 h-4 text-stone-400" />
+                      تحميل الأسئلة فقط
+                    </button>
+                    <button 
+                      onClick={() => { printExam('both'); setShowPrintMenu(false); }}
+                      className="w-full text-right px-4 py-3 hover:bg-stone-50 transition-colors flex items-center gap-3 text-sm"
+                    >
+                      <BookOpen className="w-4 h-4 text-emerald-400" />
+                      الأسئلة والأجوبة
+                    </button>
+                  </div>
+                )}
+              </div>
+               <button 
+                onClick={saveExam}
+                disabled={isSaving}
+                className="flex-1 md:flex-none bg-emerald-600 text-white px-6 md:px-8 py-2 rounded-xl font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 flex items-center justify-center gap-2 disabled:opacity-50 text-sm"
+              >
+                {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                حفظ
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Structured Extraction Options */}
+      {!initialData && questions.length === 0 && !extractionMode && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4" data-html2canvas-ignore>
           <button 
             onClick={() => {
               setExtractionMode('dual');
               setDualQImages([]);
               setDualAImages([]);
             }}
-            className="px-6 py-2 rounded-xl bg-emerald-100 text-emerald-900 flex items-center gap-2 hover:bg-emerald-200 transition-all text-sm border border-emerald-200"
-            title="استخراج الأسئلة والأجوبة معاً من صور منفصلة"
+            className="flex flex-col items-center gap-4 p-6 bg-emerald-50 border-2 border-emerald-100 rounded-3xl hover:border-emerald-300 hover:bg-emerald-100/50 transition-all text-right group ring-1 ring-emerald-200"
           >
-            <Layers className="w-4 h-4" />
-            استخراج (أسئلة + أجوبة) منفصلة
+            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+              <Layers className="w-6 h-6 text-emerald-600" />
+            </div>
+            <div>
+              <p className="font-bold text-emerald-900 mb-1 leading-tight">الخيار الأول: (أسئلة + أجوبة) منفصلة</p>
+              <p className="text-[11px] text-emerald-700 leading-relaxed">استخراج من صورتين مختلفتين، صورة لورقة الأسئلة وصورة لورقة الأجوبة النموذجية. (يرجى رفع الاثنين معاً)</p>
+            </div>
           </button>
 
           <button 
             onClick={() => {
-              if (userProfile && (userProfile.pagesUsed + extractionImages.length) > userProfile.pageLimit) {
-                alert(`عذراً، لقد تجاوزت الحد المسموح به من الصفحات (${userProfile.pageLimit}). يرجى التواصل مع الإدارة لزيادة الحد.`);
-                return;
-              }
+              setExtractionMode('single');
+              extractionInputRef.current?.click();
+            }}
+            className="flex flex-col items-center gap-4 p-6 bg-stone-50 border-2 border-stone-100 rounded-3xl hover:border-emerald-300 hover:bg-white transition-all text-right group"
+          >
+            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+              <FileUp className="w-6 h-6 text-stone-600" />
+            </div>
+            <div>
+              <p className="font-bold text-stone-900 mb-1 leading-tight">الخيار الثاني: ورقة (سؤال وجواب)</p>
+              <p className="text-[11px] text-stone-500 leading-relaxed">يرفع صورة واحدة لكل سؤال وتحته الجواب، سيتم الربط تلقائياً.</p>
+            </div>
+          </button>
+
+          <button 
+            onClick={() => {
               setExtractionMode('single');
               extractionCameraInputRef.current?.click();
             }}
-            className="px-6 py-2 rounded-xl bg-stone-100 text-stone-900 flex items-center gap-2 hover:bg-stone-200 transition-all text-sm"
-            title="فتح الكاميرا"
+            className="flex flex-col items-center gap-4 p-6 bg-stone-50 border-2 border-stone-100 rounded-3xl hover:border-emerald-300 hover:bg-white transition-all text-right group"
           >
-            <Camera className="w-4 h-4" />
-            فتح الكاميرا
-          </button>
-          <input 
-            type="file" 
-            ref={extractionInputRef} 
-            onChange={handleExtractionFileChange} 
-            accept="image/*" 
-            multiple 
-            className="hidden" 
-          />
-          <input 
-            type="file" 
-            ref={extractionCameraInputRef} 
-            onChange={handleExtractionFileChange} 
-            accept="image/*" 
-            capture="environment"
-            className="hidden" 
-          />
-          
-          <input 
-            type="file" 
-            ref={dualQInputRef} 
-            onChange={(e) => {
-              const files = Array.from(e.target.files || []);
-              Promise.all(files.map(f => new Promise<string>(r => {
-                const fr = new FileReader();
-                fr.onloadend = () => r(fr.result as string);
-                fr.readAsDataURL(f);
-              }))).then(res => setDualQImages(prev => [...prev, ...res]));
-            }} 
-            accept="image/*" 
-            multiple 
-            className="hidden" 
-          />
-          <input 
-            type="file" 
-            ref={dualAInputRef} 
-            onChange={(e) => {
-              const files = Array.from(e.target.files || []);
-              Promise.all(files.map(f => new Promise<string>(r => {
-                const fr = new FileReader();
-                fr.onloadend = () => r(fr.result as string);
-                fr.readAsDataURL(f);
-              }))).then(res => setDualAImages(prev => [...prev, ...res]));
-            }} 
-            accept="image/*" 
-            multiple 
-            className="hidden" 
-          />
-          <button onClick={onCancel} className="px-6 py-2 rounded-xl text-stone-500 hover:bg-stone-100 transition-colors">إلغاء</button>
-          
-          {questions.length > 0 && (
-            <div className="flex flex-col items-end">
-              <span className="text-[10px] text-stone-400 font-bold mb-1 hidden md:block">جاهز للطباعة؟</span>
-              <div className="relative">
-                <button 
-                  onClick={() => setShowPrintMenu(!showPrintMenu)}
-                  disabled={isPrinting}
-                  className="px-6 py-2 rounded-xl bg-stone-900 text-white flex items-center gap-2 hover:bg-stone-800 disabled:opacity-50 text-sm md:text-base"
-                >
-                  {isPrinting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-                  تحميل النماذج للطباعة (PDF)
-                  <ChevronDown className={cn("w-4 h-4 transition-transform", showPrintMenu && "rotate-180")} />
-                </button>
-                <AnimatePresence>
-                  {showPrintMenu && (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 10 }}
-                      className="absolute top-full left-0 mt-2 w-48 bg-white rounded-xl shadow-xl border border-stone-100 py-2 z-50"
-                    >
-                      <button 
-                        onClick={() => {
-                          printExam('questions');
-                          setShowPrintMenu(false);
-                        }}
-                        className="w-full text-right px-4 py-2 text-sm hover:bg-stone-50 text-stone-700"
-                      >
-                        تحميل الأسئلة فقط
-                      </button>
-                      <button 
-                        onClick={() => {
-                          printExam('both');
-                          setShowPrintMenu(false);
-                        }}
-                        className="w-full text-right px-4 py-2 text-sm hover:bg-stone-50 text-stone-700 border-t border-stone-50"
-                      >
-                        تحميل الأسئلة والأجوبة
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+              <Camera className="w-6 h-6 text-stone-600" />
             </div>
-          )}
-
-          <button 
-            onClick={saveExam} 
-            disabled={isSaving}
-            className="px-6 py-2 rounded-xl bg-emerald-600 text-white flex items-center gap-2 hover:bg-emerald-700 disabled:opacity-50"
-          >
-            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {isSaving ? (savingStatus || 'جاري الحفظ...') : 'حفظ الامتحان'}
+            <div>
+              <p className="font-bold text-stone-900 mb-1 leading-tight">الخيار الثالث: الفتح السريع (الكاميرا)</p>
+              <p className="text-[11px] text-stone-500 leading-relaxed">تصوير ورقة الامتحان والأجوبة بشكل هجين وسريع ومباشر عبر كاميرا الجهاز.</p>
+            </div>
           </button>
         </div>
-      </div>
+      )}
 
+      {/* Hidden file inputs moved here for better management */}
+      <div className="hidden">
+        <input type="file" ref={extractionInputRef} onChange={handleExtractionFileChange} accept="image/*" multiple />
+        <input type="file" ref={extractionCameraInputRef} onChange={handleExtractionFileChange} accept="image/*" capture="environment" />
+        <input type="file" ref={dualQInputRef} onChange={(e) => {
+          const files = Array.from(e.target.files || []);
+          Promise.all(files.map(f => new Promise<string>(r => {
+            const fr = new FileReader(); fr.onloadend = () => r(fr.result as string); fr.readAsDataURL(f);
+          }))).then(res => setDualQImages(prev => [...prev, ...res]));
+        }} accept="image/*" multiple />
+        <input type="file" ref={dualAInputRef} onChange={(e) => {
+          const files = Array.from(e.target.files || []);
+          Promise.all(files.map(f => new Promise<string>(r => {
+            const fr = new FileReader(); fr.onloadend = () => r(fr.result as string); fr.readAsDataURL(f);
+          }))).then(res => setDualAImages(prev => [...prev, ...res]));
+        }} accept="image/*" multiple />
+      </div>
+      {/* Extraction Image Previews and Final Processing Card */}
       {(extractionImages.length > 0 || extractionMode === 'dual') && (
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           className="bg-emerald-50 p-6 rounded-3xl border border-emerald-100 space-y-4"
+          data-html2canvas-ignore
         >
           {extractionMode === 'single' ? (
             <>
@@ -2651,7 +2703,8 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
       if (userProfile) {
         try {
           await setDoc(doc(db, 'users', user.uid), {
-            pagesUsed: (userProfile.pagesUsed || 0) + images.length
+            pagesUsed: (userProfile.pagesUsed || 0) + images.length,
+            gradingsCount: (userProfile.gradingsCount || 0) + results.length
           }, { merge: true });
         } catch (e) {
           handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`);
