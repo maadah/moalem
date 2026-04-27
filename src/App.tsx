@@ -487,7 +487,7 @@ function App() {
       setPendingCount(snapshot.size);
     }, (error) => console.error("Pending users listener error:", error));
     return () => unsubscribe();
-  }, [user, userProfile?.role]);
+  }, [user?.email, userProfile?.role]);
 
   useEffect(() => {
     // Test connection
@@ -805,7 +805,7 @@ function App() {
           <NavButton mobile active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<LayoutGrid className="w-5 h-5" />} label="الرئيسية" />
           <NavButton mobile active={view === 'create-exam'} onClick={() => setView('create-exam')} icon={<Plus className="w-5 h-5" />} label="امتحان" />
           <NavButton mobile active={view === 'results'} onClick={() => setView('results')} icon={<List className="w-5 h-5" />} label="النتائج" />
-          {(userProfile?.role === 'admin' || user.email === 'asmaomar5566@gmail.com') && (
+          {(userProfile?.role === 'admin' || user.email?.toLowerCase().trim() === 'asmaomar5566@gmail.com') && (
             <div className="relative">
               <NavButton mobile active={view === 'admin'} onClick={() => setView('admin')} icon={<Users className="w-5 h-5" />} label="الإدارة" />
               {pendingCount > 0 && (
@@ -907,7 +907,7 @@ function AdminDashboard() {
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-emerald-600" /></div>;
 
   const pendingUsers = users.filter(u => u.status === 'pending');
-  const activeUsers = users.filter(u => u.status === 'approved' && (u.role !== 'admin' || u.email === 'asmaomar5566@gmail.com'));
+  const activeUsers = users.filter(u => u.status === 'approved' && (u.role !== 'admin' || u.email?.toLowerCase().trim() === 'asmaomar5566@gmail.com'));
 
   return (
     <motion.div 
@@ -916,9 +916,17 @@ function AdminDashboard() {
       className="space-y-6 md:space-y-8 pb-10"
     >
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <h2 className="text-2xl md:text-3xl font-bold font-serif italic">لوحة تحكم المدير</h2>
-        <div className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-sm font-bold w-fit">
-          إجمالي المستخدمين: {users.length}
+        <div className="space-y-1">
+          <h2 className="text-2xl md:text-3xl font-bold font-serif italic">لوحة تحكم المدير</h2>
+          <p className="text-xs text-stone-400">إدارة المستخدمين والصلاحيات وباقات الصفحات</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-sm font-bold shadow-sm">
+            إجمالي المستخدمين: {users.length}
+          </div>
+          <div className="bg-stone-100 text-stone-600 px-4 py-2 rounded-xl text-sm font-bold shadow-sm">
+            قيد الانتظار: {pendingUsers.length}
+          </div>
         </div>
       </div>
 
@@ -933,7 +941,7 @@ function AdminDashboard() {
               <div key={u.uid} className="bg-white p-6 rounded-3xl border border-amber-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex items-center gap-4 w-full">
                   <div className="w-12 h-12 bg-stone-100 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-stone-400">
-                    {u.displayName?.charAt(0) || u.email.charAt(0)}
+                    {u.displayName?.charAt(0) || u.email?.charAt(0) || '?'}
                   </div>
                   <div className="min-w-0">
                     <p className="font-bold truncate">{u.displayName || 'بدون اسم'}</p>
@@ -982,7 +990,7 @@ function AdminDashboard() {
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 bg-stone-100 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-stone-400">
-                        {u.displayName?.charAt(0) || u.email.charAt(0)}
+                        {u.displayName?.charAt(0) || u.email?.charAt(0) || '?'}
                       </div>
                       <div className="min-w-0">
                         <p className="text-sm font-bold truncate">{u.displayName || 'بدون اسم'}</p>
@@ -1037,7 +1045,7 @@ function AdminDashboard() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 bg-stone-100 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-stone-400">
-                    {u.displayName?.charAt(0) || u.email.charAt(0)}
+                    {u.displayName?.charAt(0) || u.email?.charAt(0) || '?'}
                   </div>
                   <div>
                     <p className="font-bold text-sm">{u.displayName || 'بدون اسم'}</p>

@@ -61,7 +61,7 @@ service cloud.firestore {
     function isAdmin() {
       return isAuthenticated() && 
         (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
-         request.auth.token.email == "asmaomar5566@gmail.com");
+         request.auth.token.email.lower() == "asmaomar5566@gmail.com");
     }
 
     function isApproved() {
@@ -113,7 +113,7 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
       allow create: if isAuthenticated() && request.auth.uid == userId && 
                     (
-                      (request.auth.token.email == "asmaomar5566@gmail.com" && 
+                      (request.auth.token.email.lower() == "asmaomar5566@gmail.com" && 
                        request.resource.data.status == 'approved' && 
                        request.resource.data.role == 'admin') ||
                       (request.resource.data.status == 'pending' && 
