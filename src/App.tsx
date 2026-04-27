@@ -6,7 +6,7 @@ import {
   LogOut, Loader2, FileUp, List, Settings, User,
   HelpCircle, CheckSquare, Type, LayoutGrid, Image as ImageIcon,
   ArrowRight, Calendar, Folder, FolderOpen, Users, Camera, Layers,
-  Phone, MessageCircle
+  Phone, MessageCircle, Printer, BookOpen, PlusCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -499,6 +499,8 @@ function App() {
               role: u.email === 'asmaomar5566@gmail.com' ? 'admin' : 'user',
               pageLimit: 500,
               pagesUsed: 0,
+              questionsCount: 0,
+              gradingsCount: 0,
               createdAt: serverTimestamp()
             };
             await setDoc(userDocRef, newProfile);
@@ -1301,7 +1303,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
   const [extractionImages, setExtractionImages] = useState<string[]>([]);
   const [dualQImages, setDualQImages] = useState<string[]>([]);
   const [dualAImages, setDualAImages] = useState<string[]>([]);
-  const [extractionMode, setExtractionMode] = useState<'single' | 'dual' | null>(null);
+  const [extractionMode, setExtractionMode] = useState<'single' | 'dual' | 'manual' | null>(null);
 
   const extractionInputRef = useRef<HTMLInputElement>(null);
   const extractionCameraInputRef = useRef<HTMLInputElement>(null);
@@ -1727,7 +1729,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
 
       {/* Structured Extraction Options */}
       {!initialData && questions.length === 0 && !extractionMode && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4" data-html2canvas-ignore>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" data-html2canvas-ignore>
           <button 
             onClick={() => {
               setExtractionMode('dual');
@@ -1741,7 +1743,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
             </div>
             <div>
               <p className="font-bold text-emerald-900 mb-1 leading-tight">الخيار الأول: (أسئلة + أجوبة) منفصلة</p>
-              <p className="text-[11px] text-emerald-700 leading-relaxed">استخراج من صورتين مختلفتين، صورة لورقة الأسئلة وصورة لورقة الأجوبة النموذجية. (يرجى رفع الاثنين معاً)</p>
+              <p className="text-[11px] text-emerald-700 leading-relaxed">استخراج من صورتين مختلفتين، صورة لورقة الأسئلة وصورة لورقة الأجوبة النموذجية.</p>
             </div>
           </button>
 
@@ -1774,6 +1776,19 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
             <div>
               <p className="font-bold text-stone-900 mb-1 leading-tight">الخيار الثالث: الفتح السريع (الكاميرا)</p>
               <p className="text-[11px] text-stone-500 leading-relaxed">تصوير ورقة الامتحان والأجوبة بشكل هجين وسريع ومباشر عبر كاميرا الجهاز.</p>
+            </div>
+          </button>
+
+          <button 
+            onClick={() => setExtractionMode('manual')}
+            className="flex flex-col items-center gap-4 p-6 bg-blue-50 border-2 border-blue-100 rounded-3xl hover:border-blue-300 hover:bg-white transition-all text-right group"
+          >
+            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+              <PlusCircle className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <p className="font-bold text-blue-900 mb-1 leading-tight">الخيار الرابع: إضافة يدوية</p>
+              <p className="text-[11px] text-blue-500 leading-relaxed">كتابة الأسئلة والأجوبة وتحديد الدرجات يدوياً دون الحاجة لاستخراج من الصور.</p>
             </div>
           </button>
         </div>
@@ -1900,7 +1915,9 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
         </motion.div>
       )}
 
-      <div className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
+      {/* Meta Section - Conditioned on Mode/Extraction Success */}
+      {(extractionMode === 'manual' || (questions.length > 0 && !isExtracting)) && (
+        <div className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6 animate-in fade-in duration-500">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6" data-html2canvas-ignore>
           <div className="space-y-2">
             <label className="text-sm font-medium text-stone-500">عنوان الامتحان / المادة</label>
@@ -1932,38 +1949,46 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
               className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
             />
           </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-stone-500">الدرجة الكلية</label>
-            <input 
-              type="number" 
-              value={totalGrade} 
-              onChange={(e) => setTotalGrade(Number(e.target.value))}
-              className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-stone-500">عدد الأسئلة المطلوب حلها</label>
-            <input 
-              type="number" 
-              value={requiredQuestionsCount || ''} 
-              onChange={(e) => setRequiredQuestionsCount(e.target.value ? Number(e.target.value) : null)}
-              placeholder={`الافتراضي: ${questions.length || 0}`}
-              className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-            />
-          </div>
-          <div className="space-y-2">
-            <label className="text-sm font-medium text-stone-500">الوقت (مثلاً: ثلاث ساعات)</label>
-            <input 
-              type="text" 
-              value={duration} 
-              onChange={(e) => setDuration(e.target.value)}
-              placeholder="الوقت المخصص"
-              className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-            />
-          </div>
+          
+          {/* Show structural fields ONLY if manual mode OR AI questions-only (no answers) */}
+          {(extractionMode === 'manual' || !questions.some(q => q.answer)) && (
+            <>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-stone-500">الدرجة الكلية</label>
+                <input 
+                  type="number" 
+                  value={totalGrade} 
+                  onChange={(e) => setTotalGrade(Number(e.target.value))}
+                  className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-stone-500">عدد الأسئلة المطلوب حلها</label>
+                <input 
+                  type="number" 
+                  value={requiredQuestionsCount || ''} 
+                  onChange={(e) => setRequiredQuestionsCount(e.target.value ? Number(e.target.value) : null)}
+                  placeholder={`الافتراضي: ${questions.length || 0}`}
+                  className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-stone-500">الوقت (مثلاً: ثلاث ساعات)</label>
+                <input 
+                  type="text" 
+                  value={duration} 
+                  onChange={(e) => setDuration(e.target.value)}
+                  placeholder="الوقت المخصص"
+                  className="w-full px-4 py-3 rounded-xl border border-stone-200 focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
+                />
+              </div>
+            </>
+          )}
         </div>
+      </div>
+    )}
 
-        {/* Official Exam Header for PDF (Questions Only) */}
+      {/* Official Exam Header for PDF (Questions Only) */}
         <div className="fixed left-[-9999px] top-0 w-[210mm] pdf-export-container" ref={examPrintRef}>
           <div className="px-[20mm] py-[25mm] bg-white space-y-8 text-right" dir="rtl" style={{ boxSizing: 'border-box' }}>
             <div className="flex justify-between items-start border-b-2 border-stone-900 pb-6">
@@ -2120,19 +2145,22 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
           </div>
         </div>
 
-        <div className="space-y-6">
-          <div className="flex items-center justify-between border-t border-stone-100 pt-6" data-html2canvas-ignore>
-            <h3 className="text-xl font-bold">الأسئلة</h3>
-            <button 
-              onClick={addQuestion}
-              className="text-emerald-600 flex items-center gap-1 text-sm font-bold hover:underline"
-            >
-              <Plus className="w-4 h-4" /> إضافة سؤال
-            </button>
-          </div>
-
-          <div className="space-y-4">
-            {questions.map((q, index) => (
+        {(extractionMode === 'manual' || questions.length > 0) && (
+          <div className="bg-white p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
+            <div className="flex items-center justify-between border-b border-stone-100 pt-6" data-html2canvas-ignore>
+              <h3 className="text-xl font-bold">الأسئلة</h3>
+              {(extractionMode === 'manual' || !questions.some(q => q.answer)) && (
+                <button 
+                  onClick={addQuestion}
+                  className="text-emerald-600 flex items-center gap-1 text-sm font-bold hover:underline"
+                >
+                  <Plus className="w-4 h-4" /> إضافة سؤال
+                </button>
+              )}
+            </div>
+            
+            <div className="space-y-4">
+              {questions.map((q, index) => (
               <div key={q.id} className="p-2 sm:p-6 bg-stone-50 rounded-2xl border border-stone-200 space-y-3 relative group">
                 <button 
                   onClick={() => removeQuestion(q.id)}
@@ -2546,7 +2574,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
             ))}
           </div>
         </div>
-      </div>
+      )}
     </motion.div>
   );
 }
