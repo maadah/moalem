@@ -859,7 +859,7 @@ function AdminDashboard() {
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-emerald-600" /></div>;
 
   const pendingUsers = users.filter(u => u.status === 'pending');
-  const activeUsers = users.filter(u => u.status === 'approved' && u.role !== 'admin');
+  const activeUsers = users.filter(u => u.status === 'approved' && (u.role !== 'admin' || u.email === 'asmaomar5566@gmail.com'));
 
   return (
     <motion.div 
@@ -956,14 +956,17 @@ function AdminDashboard() {
                   <td className="px-6 py-4 text-sm font-medium text-stone-600">{u.questionsCount || 0}</td>
                   <td className="px-6 py-4 text-sm font-medium text-stone-600">{u.gradingsCount || 0}</td>
                   <td className="px-6 py-4">
-                    <input 
-                      type="number"
-                      step="50"
-                      min="100"
+                    <select 
                       value={u.pageLimit}
                       onChange={(e) => updateUserLimit(u.uid, Number(e.target.value))}
-                      className="w-24 bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-200 text-xs outline-none focus:ring-2 focus:ring-emerald-500 text-center"
-                    />
+                      className="w-28 bg-stone-50 px-3 py-1.5 rounded-lg border border-stone-200 text-xs outline-none focus:ring-2 focus:ring-emerald-500 text-center font-bold cursor-pointer"
+                    >
+                      <option value="100">100 صفحة</option>
+                      <option value="500">500 صفحة</option>
+                      <option value="1000">1000 صفحة</option>
+                      <option value="1500">1500 صفحة</option>
+                      <option value="2000">2000 صفحة</option>
+                    </select>
                   </td>
                   <td className="px-6 py-4">
                     <button 
@@ -1029,16 +1032,19 @@ function AdminDashboard() {
                     />
                   </div>
                 </div>
-                <div className="w-24">
-                  <p className="text-[10px] text-stone-400 mb-1">الحد</p>
-                  <input 
-                    type="number"
-                    step="50"
-                    min="100"
+                <div className="w-28">
+                  <p className="text-[10px] text-stone-400 mb-1">الحد المسموح</p>
+                  <select 
                     value={u.pageLimit}
                     onChange={(e) => updateUserLimit(u.uid, Number(e.target.value))}
-                    className="w-full bg-stone-50 px-2 py-1 rounded-lg border border-stone-200 text-xs outline-none"
-                  />
+                    className="w-full bg-stone-50 px-2 py-1.5 rounded-lg border border-stone-200 text-xs outline-none font-bold cursor-pointer"
+                  >
+                    <option value="100">100</option>
+                    <option value="500">500</option>
+                    <option value="1000">1000</option>
+                    <option value="1500">1500</option>
+                    <option value="2000">2000</option>
+                  </select>
                 </div>
               </div>
             </div>
