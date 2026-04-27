@@ -466,6 +466,19 @@ function App() {
   const [editingExam, setEditingExam] = useState<any>(null);
   const [results, setResults] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    if (!user || (userProfile?.role !== 'admin' && user.email !== 'asmaomar5566@gmail.com')) {
+      setPendingCount(0);
+      return;
+    }
+    const q = query(collection(db, 'users'), where('status', '==', 'pending'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setPendingCount(snapshot.size);
+    }, (error) => console.error("Pending users listener error:", error));
+    return () => unsubscribe();
+  }, [user, userProfile?.role]);
 
   useEffect(() => {
     // Test connection
@@ -701,8 +714,15 @@ function App() {
               <NavButton active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<LayoutGrid className="w-4 h-4" />} label="لوحة التحكم" />
               <NavButton active={view === 'create-exam'} onClick={() => setView('create-exam')} icon={<Plus className="w-4 h-4" />} label="إنشاء امتحان" />
               <NavButton active={view === 'results'} onClick={() => setView('results')} icon={<List className="w-4 h-4" />} label="النتائج" />
-              {userProfile?.role === 'admin' && (
-                <NavButton active={view === 'admin'} onClick={() => setView('admin')} icon={<Users className="w-4 h-4" />} label="الإدارة" />
+              {(userProfile?.role === 'admin' || user.email === 'asmaomar5566@gmail.com') && (
+                <div className="relative">
+                  <NavButton active={view === 'admin'} onClick={() => setView('admin')} icon={<Users className="w-4 h-4" />} label="الإدارة" />
+                  {pendingCount > 0 && (
+                    <span className="absolute -top-1 -left-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-bounce shadow-sm">
+                      {pendingCount}
+                    </span>
+                  )}
+                </div>
               )}
               <div className="h-4 w-px bg-stone-200 mx-2 hidden xl:block" />
               <div className="hidden xl:flex items-center gap-4">
@@ -764,8 +784,15 @@ function App() {
           <NavButton mobile active={view === 'dashboard'} onClick={() => setView('dashboard')} icon={<LayoutGrid className="w-5 h-5" />} label="الرئيسية" />
           <NavButton mobile active={view === 'create-exam'} onClick={() => setView('create-exam')} icon={<Plus className="w-5 h-5" />} label="امتحان" />
           <NavButton mobile active={view === 'results'} onClick={() => setView('results')} icon={<List className="w-5 h-5" />} label="النتائج" />
-          {userProfile?.role === 'admin' && (
-            <NavButton mobile active={view === 'admin'} onClick={() => setView('admin')} icon={<Users className="w-5 h-5" />} label="الإدارة" />
+          {(userProfile?.role === 'admin' || user.email === 'asmaomar5566@gmail.com') && (
+            <div className="relative">
+              <NavButton mobile active={view === 'admin'} onClick={() => setView('admin')} icon={<Users className="w-5 h-5" />} label="الإدارة" />
+              {pendingCount > 0 && (
+                <span className="absolute -top-1 -left-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center animate-bounce border-2 border-white shadow-sm">
+                  {pendingCount}
+                </span>
+              )}
+            </div>
           )}
         </div>
       </nav>
@@ -808,7 +835,7 @@ function App() {
               onBack={() => setView('dashboard')}
             />
           )}
-          {view === 'admin' && userProfile?.role === 'admin' && (
+          {view === 'admin' && (userProfile?.role === 'admin' || user.email === 'asmaomar5566@gmail.com') && (
             <AdminDashboard />
           )}
         </AnimatePresence>
@@ -829,6 +856,22 @@ function AdminDashboard() {
     });
     return () => unsubscribe();
   }, []);
+
+  const formatDateTime = (timestamp: any) => {
+    if (!timestamp) return 'غير متوفر';
+    try {
+      const date = timestamp.seconds ? new Date(timestamp.seconds * 1000) : (timestamp.toDate ? timestamp.toDate() : new Date(timestamp));
+      return date.toLocaleDateString('ar-IQ', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (e) {
+      return 'تاريخ غير صالح';
+    }
+  };
 
   const updateUserStatus = async (uid: string, status: 'approved' | 'rejected') => {
     try {
