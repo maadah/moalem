@@ -60,13 +60,15 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
-         request.auth.token.email.lower() == "asmaomar5566@gmail.com");
+        (request.auth.token.email.lower() == "asmaomar5566@gmail.com" || 
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
     }
 
     function isApproved() {
       return isAuthenticated() && 
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved' || 
+        ((exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'approved') || 
          isAdmin());
     }
 
@@ -102,7 +104,9 @@ service cloud.firestore {
              data.status in ['pending', 'approved', 'rejected'] &&
              data.role in ['admin', 'user'] &&
              data.pageLimit is number &&
-             data.pagesUsed is number;
+             data.pagesUsed is number &&
+             data.questionsCount is number &&
+             data.gradingsCount is number;
     }
 
     // ===============================================================
@@ -110,8 +114,10 @@ service cloud.firestore {
     // ===============================================================
 
     match /users/{userId} {
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow get: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow list: if isAdmin();
       allow create: if isAuthenticated() && request.auth.uid == userId && 
+                    isValidUser(request.resource.data) &&
                     (
                       (request.auth.token.email.lower() == "asmaomar5566@gmail.com" && 
                        request.resource.data.status == 'approved' && 
@@ -120,9 +126,11 @@ service cloud.firestore {
                        request.resource.data.role == 'user')
                     ) &&
                     request.resource.data.pageLimit == 100 &&
-                    request.resource.data.pagesUsed == 0;
+                    request.resource.data.pagesUsed == 0 &&
+                    request.resource.data.questionsCount == 0 &&
+                    request.resource.data.gradingsCount == 0;
       allow update: if isAdmin() || (isOwner(userId) && 
-                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pagesUsed', 'displayName']));
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pagesUsed', 'displayName', 'questionsCount', 'gradingsCount']));
       allow delete: if isAdmin();
     }
 

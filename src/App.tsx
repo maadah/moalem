@@ -482,9 +482,12 @@ function App() {
       return;
     }
 
-    const q = query(collection(db, 'users'), where('status', '==', 'pending'));
+    const q = query(collection(db, 'users'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setPendingCount(snapshot.size);
+      const allUsers = snapshot.docs.map(doc => doc.data());
+      const pCount = allUsers.filter((u: any) => !u.status || u.status === 'pending').length;
+      console.log("Nav: Calculated pending count (inclusive):", pCount);
+      setPendingCount(pCount);
     }, (error) => console.error("Pending users listener error:", error));
     return () => unsubscribe();
   }, [user?.email, userProfile?.role]);
@@ -514,7 +517,12 @@ function App() {
             const data = userDoc.data() as UserProfile;
             const isAdminEmail = u.email?.toLowerCase().trim() === 'asmaomar5566@gmail.com';
             
+            if (isAdminEmail) {
+              console.log("Auth: Current user is identified as ADMIN by email.");
+            }
+            
             if (isAdminEmail && (data.status !== 'approved' || data.role !== 'admin')) {
+              console.log("Auth: Updating admin profile status/role...");
               await updateDoc(userDocRef, {
                 status: 'approved',
                 role: 'admin'
@@ -522,8 +530,10 @@ function App() {
               data.status = 'approved';
               data.role = 'admin';
             }
+            console.log("Auth: User profile loaded:", data);
             setUserProfile(data);
           } else {
+            console.log("Auth: No user profile found. Creating new profile...");
             const isAdminEmail = u.email?.toLowerCase().trim() === 'asmaomar5566@gmail.com';
             const newProfile: UserProfile = {
               uid: u.uid,
@@ -538,6 +548,7 @@ function App() {
               createdAt: serverTimestamp()
             };
             await setDoc(userDocRef, newProfile);
+            console.log("Auth: New profile created:", newProfile);
             setUserProfile(newProfile);
           }
         } else {
@@ -870,9 +881,16 @@ function AdminDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    console.log("AdminDashboard: Starting users listener...");
     const q = query(collection(db, 'users'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setUsers(snapshot.docs.map(doc => doc.data() as UserProfile));
+      console.log("AdminDashboard: Received users snapshot, size:", snapshot.size);
+      const fetchedUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile));
+      console.log("AdminDashboard: Users data:", fetchedUsers);
+      setUsers(fetchedUsers);
+      setLoading(false);
+    }, (error) => {
+      console.error("AdminDashboard: Admin view users listener error:", error);
       setLoading(false);
     });
     return () => unsubscribe();
@@ -906,8 +924,17 @@ function AdminDashboard() {
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-emerald-600" /></div>;
 
-  const pendingUsers = users.filter(u => u.status === 'pending');
-  const activeUsers = users.filter(u => u.status === 'approved' && (u.role !== 'admin' || u.email?.toLowerCase().trim() === 'asmaomar5566@gmail.com'));
+  const pendingUsers = users.filter(u => !u.status || (u.status as string) === 'pending');
+  const activeUsers = users.filter(u => (u.status as string) === 'approved' && (u.role !== 'admin' || u.email?.toLowerCase().trim() === 'asmaomar5566@gmail.com'));
+
+  useEffect(() => {
+    console.log("AdminDashboard Check: Total users:", users.length);
+    console.log("AdminDashboard Check: Pending users:", pendingUsers.length);
+    console.log("AdminDashboard Check: Active users:", activeUsers.length);
+    if (users.length > 0) {
+      console.log("AdminDashboard Check: First user status:", users[0].status);
+    }
+  }, [users, pendingUsers.length, activeUsers.length]);
 
   return (
     <motion.div 
@@ -922,13 +949,21 @@ function AdminDashboard() {
         </div>
         <div className="flex items-center gap-2">
           <div className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-sm font-bold shadow-sm">
-            إجمالي المستخدمين: {users.length}
+            إجمالي السجلات في القاعدة: {users.length}
           </div>
-          <div className="bg-stone-100 text-stone-600 px-4 py-2 rounded-xl text-sm font-bold shadow-sm">
+          <div className="bg-stone-100 text-stone-600 px-4 py-2 rounded-xl text-sm font-bold shadow-sm flex items-center gap-2">
             قيد الانتظار: {pendingUsers.length}
           </div>
         </div>
       </div>
+
+      {users.length === 0 && !loading && (
+        <div className="p-12 text-center bg-white rounded-3xl border-2 border-dashed border-stone-200 text-stone-400">
+          لم يتم العثور على أي مستخدمين في قاعدة البيانات. 
+          <br/>
+          تأكد من أنك مسجل دخول بالحساب الصحيح وأن الحسابات الأخرى قد أكملت عملية التسجيل.
+        </div>
+      )}
 
       {pendingUsers.length > 0 && (
         <div className="space-y-4">

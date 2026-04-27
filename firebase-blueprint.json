@@ -78,9 +78,11 @@
         "role": { "type": "string", "enum": ["admin", "user"] },
         "pageLimit": { "type": "number" },
         "pagesUsed": { "type": "number" },
+        "questionsCount": { "type": "number", "description": "Number of questions extracted by this user." },
+        "gradingsCount": { "type": "number", "description": "Number of papers graded by this user." },
         "createdAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["uid", "email", "status", "role", "pageLimit", "pagesUsed"]
+      "required": ["uid", "email", "status", "role", "pageLimit", "pagesUsed", "questionsCount", "gradingsCount"]
     }
   },
   "firestore": {
