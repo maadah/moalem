@@ -376,12 +376,12 @@ function cleanQuestionText(text: string, label?: string) {
   
   if (label) {
     const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(`^${escapedLabel}[:\-\.\s]*`, 'i');
+    const regex = new RegExp(`^${escapedLabel}[:.\\s-]*`, 'i');
     cleaned = cleaned.replace(regex, '').trim();
   }
   
   // Also common patterns if label wasn't passed or match failed
-  const commonPrefixes = [/^[سQ]\s*\d+[:\-\. ]*/i, /^[أبجدهوزحطيكل]\s*[:\-\. ]+/i, /^فرع\s+[أبجدهوز]\s*[:\-\. ]*/i];
+  const commonPrefixes = [/^[سQ]\s*\d+[:. -]*/i, /^[أبجدهوزحطيكل]\s*[:. -]+/i, /^فرع\s+[أبجدهوز]\s*[:. -]*/i];
   commonPrefixes.forEach(p => {
     cleaned = cleaned.replace(p, '').trim();
   });
@@ -394,7 +394,7 @@ function GradingResultItem({ question, gradings, onGradeChange, level = 1 }: any
   const hasSub = question.subQuestions && question.subQuestions.length > 0;
   
   // Try to extract a clean label (e.g., "س1" or "أ")
-  let label = question.text.split(/[:\-\.\/\(\)\[\]]/)[0].trim();
+  let label = question.text.split(/[:./\(\)\[\]-]/)[0].trim();
   if (label.length > 15 || label.length === 0) label = "";
   
   const displayLabel = level === 1 
