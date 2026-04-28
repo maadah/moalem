@@ -911,11 +911,24 @@ function AdminDashboard() {
 
   useEffect(() => {
     console.log("AdminDashboard: Starting users listener...");
-    const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'users'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       console.log("AdminDashboard: Received users snapshot, size:", snapshot.size);
       const fetchedUsers = snapshot.docs.map(doc => ({ ...doc.data(), uid: doc.id } as UserProfile));
-      console.log("AdminDashboard: Users data:", fetchedUsers);
+      
+      // Sort in JS: New users (isNew) first, then by createdAt desc, then by email
+      fetchedUsers.sort((a: any, b: any) => {
+        if (a.isNew && !b.isNew) return -1;
+        if (!a.isNew && b.isNew) return 1;
+        
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        if (timeA !== timeB) return timeB - timeA;
+        
+        return (a.email || "").localeCompare(b.email || "");
+      });
+
+      console.log("AdminDashboard: Sorted users:", fetchedUsers);
       setUsers(fetchedUsers);
       setLoading(false);
     }, (error) => {

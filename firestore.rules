@@ -106,7 +106,8 @@ service cloud.firestore {
              data.pageLimit is number &&
              data.pagesUsed is number &&
              data.questionsCount is number &&
-             data.gradingsCount is number;
+             data.gradingsCount is number &&
+             (data.get('isNew', false) is bool);
     }
 
     // ===============================================================
@@ -119,10 +120,10 @@ service cloud.firestore {
       allow create: if isAuthenticated() && request.auth.uid == userId && 
                     isValidUser(request.resource.data) &&
                     (
-                      (request.auth.token.email.lower() == "asmaomar5566@gmail.com" && 
+                      (request.auth.token.get('email', '').lower() == "asmaomar5566@gmail.com" && 
                        request.resource.data.status == 'approved' && 
                        request.resource.data.role == 'admin') ||
-                      (request.resource.data.status == 'pending' && 
+                      (request.resource.data.status == 'approved' && 
                        request.resource.data.role == 'user')
                     ) &&
                     request.resource.data.pageLimit == 100 &&
@@ -130,7 +131,7 @@ service cloud.firestore {
                     request.resource.data.questionsCount == 0 &&
                     request.resource.data.gradingsCount == 0;
       allow update: if isAdmin() || (isOwner(userId) && 
-                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pagesUsed', 'displayName', 'questionsCount', 'gradingsCount']));
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pagesUsed', 'displayName', 'questionsCount', 'gradingsCount', 'isNew']));
       allow delete: if isAdmin();
     }
 
