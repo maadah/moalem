@@ -370,6 +370,16 @@ const generatePDFFromElement = async (element: HTMLElement, fileName: string, op
 };
 
 // --- Helper to clean redundant labels from text ---
+const calculateRecursiveTotalGrade = (qs: any[]): number => {
+  if (!qs) return 0;
+  return qs.reduce((acc, q) => {
+    if (q.subQuestions && q.subQuestions.length > 0) {
+      return acc + calculateRecursiveTotalGrade(q.subQuestions);
+    }
+    return acc + (Number(q.grade) || 0);
+  }, 0);
+};
+
 function cleanQuestionText(text: string, label?: string) {
   if (!text) return "";
   let cleaned = text.trim();
@@ -438,7 +448,7 @@ function GradingResultItem({ question, gradings, onGradeChange, level = 1 }: any
                 {grading.grade}
               </div>
             )}
-            <span className="text-stone-400 font-medium">/ {question.grade || '?'}</span>
+            <span className="text-stone-400 font-medium">/ {question.grade || grading?.maxGrade || '?'}</span>
           </div>
         )}
       </div>
@@ -2869,6 +2879,8 @@ function VisualPaperOverlay({ imageUrl, gradings, studentName, totalGrade, maxGr
     onAddMark([y - 20, x - 20, y + 20, x + 20]);
   };
 
+  const finalMaxGrade = maxGrade || calculateRecursiveTotalGrade(Array.isArray(gradings) ? [] : []); // Fallback not easily possible here without questions structure
+  
   return (
     <div 
       ref={containerRef} 
@@ -2951,7 +2963,7 @@ function VisualPaperOverlay({ imageUrl, gradings, studentName, totalGrade, maxGr
               <circle cx="50" cy="50" r="45" fill="white" fillOpacity="0.9" stroke="#059669" strokeWidth="4" />
               <text x="50" y="45" fontSize="24" fill="#059669" fontWeight="bold" textAnchor="middle">الدرجة</text>
               <line x1="20" y1="52" x2="80" y2="52" stroke="#059669" strokeWidth="2" />
-              <text x="50" y="78" fontSize="22" fill="#059669" fontWeight="bold" textAnchor="middle">{totalGrade} / {maxGrade}</text>
+              <text x="50" y="78" fontSize="22" fill="#059669" fontWeight="bold" textAnchor="middle">{totalGrade} / {finalMaxGrade || '?'}</text>
               
               <text x="-150" y="40" fontSize="24" fill="#374151" fontWeight="bold" textAnchor="end" className="italic">{studentName}</text>
             </g>
@@ -3313,10 +3325,16 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
                     <span className="text-5xl sm:text-6xl font-black text-emerald-600 tracking-tighter">
                       {currentGrading.totalGrade}
                     </span>
-                    <span className="text-xl sm:text-2xl font-bold text-emerald-300">/ {exam.totalGrade}</span>
+                    <span className="text-xl sm:text-2xl font-bold text-emerald-300">/ {exam.totalGrade || calculateRecursiveTotalGrade(exam.questions) || '?'}</span>
                   </div>
-                  <div className={`absolute -top-3 -right-3 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg rotate-12 ${Number(currentGrading.totalGrade) >= (Number(exam.totalGrade) * 0.5) ? 'bg-emerald-600 shadow-emerald-200' : 'bg-red-500 shadow-red-200'}`}>
-                    {Number(currentGrading.totalGrade) >= (Number(exam.totalGrade) * 0.5) ? 'ناجـح' : 'راسب'}
+                  <div className={`absolute -top-3 -right-3 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg rotate-12 ${(() => {
+                    const max = Number(exam.totalGrade) || calculateRecursiveTotalGrade(exam.questions) || 100;
+                    return Number(currentGrading.totalGrade) >= (max * 0.5);
+                  })() ? 'bg-emerald-600 shadow-emerald-200' : 'bg-red-500 shadow-red-200'}`}>
+                    {(() => {
+                      const max = Number(exam.totalGrade) || calculateRecursiveTotalGrade(exam.questions) || 100;
+                      return Number(currentGrading.totalGrade) >= (max * 0.5);
+                    })() ? 'ناجـح' : 'راسب'}
                   </div>
                 </div>
               </div>
