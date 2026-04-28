@@ -369,6 +369,26 @@ const generatePDFFromElement = async (element: HTMLElement, fileName: string, op
   }
 };
 
+// --- Helper to clean redundant labels from text ---
+function cleanQuestionText(text: string, label?: string) {
+  if (!text) return "";
+  let cleaned = text.trim();
+  
+  if (label) {
+    const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`^${escapedLabel}[:\-\.\s]*`, 'i');
+    cleaned = cleaned.replace(regex, '').trim();
+  }
+  
+  // Also common patterns if label wasn't passed or match failed
+  const commonPrefixes = [/^[سQ]\s*\d+[:\-\. ]*/i, /^[أبجدهوزحطيكل]\s*[:\-\. ]+/i, /^فرع\s+[أبجدهوز]\s*[:\-\. ]*/i];
+  commonPrefixes.forEach(p => {
+    cleaned = cleaned.replace(p, '').trim();
+  });
+
+  return cleaned;
+}
+
 function GradingResultItem({ question, gradings, onGradeChange, level = 1 }: any) {
   const grading = gradings?.find((g: any) => g.questionId === question.id);
   const hasSub = question.subQuestions && question.subQuestions.length > 0;
@@ -376,6 +396,10 @@ function GradingResultItem({ question, gradings, onGradeChange, level = 1 }: any
   // Try to extract a clean label (e.g., "س1" or "أ")
   let label = question.text.split(/[:\-\.\/\(\)\[\]]/)[0].trim();
   if (label.length > 15 || label.length === 0) label = "";
+  
+  const displayLabel = level === 1 
+    ? `سؤال ${label.replace(/^[سQ]/i, '').trim() || ''}`
+    : label;
 
   return (
     <div className={cn(
@@ -386,9 +410,9 @@ function GradingResultItem({ question, gradings, onGradeChange, level = 1 }: any
         <div className="flex flex-col gap-2 flex-1">
           <div className="flex items-start gap-2">
             <span className="font-bold text-stone-700 whitespace-nowrap">
-              {level === 1 ? "سؤال " : ""}{label || ""}:
+              {displayLabel}:
             </span>
-            <span className="text-stone-800">{question.text}</span>
+            <span className="text-stone-800">{cleanQuestionText(question.text, label)}</span>
           </div>
           {question.questionImage && (
             <img 
@@ -426,14 +450,24 @@ function GradingResultItem({ question, gradings, onGradeChange, level = 1 }: any
               <span className="text-stone-400 font-bold flex items-center gap-1 uppercase tracking-wider text-[10px]">
                 <User className="w-3 h-3" /> إجابة الطالب:
               </span>
-              <p className="p-4 bg-white rounded-2xl border border-stone-100 italic text-stone-700 leading-relaxed shadow-sm">"{grading.studentAnswer}"</p>
+              <p 
+                className="p-4 bg-white rounded-2xl border border-stone-100 italic text-stone-700 leading-relaxed shadow-sm"
+                style={{ unicodeBidi: 'plaintext', textAlign: 'start' }}
+              >
+                "{grading.studentAnswer}"
+              </p>
             </div>
             <div className="space-y-2">
               <span className="text-stone-400 font-bold flex items-center gap-1 uppercase tracking-wider text-[10px]">
                 <CheckCircle className="w-3 h-3" /> الإجابة النموذجية:
               </span>
               <div className="flex flex-col gap-3">
-                <p className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 text-emerald-900 leading-relaxed shadow-sm">"{question.answer || 'غير متوفرة'}"</p>
+                <p 
+                  className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 text-emerald-900 leading-relaxed shadow-sm"
+                  style={{ unicodeBidi: 'plaintext', textAlign: 'start' }}
+                >
+                  "{question.answer || 'غير متوفرة'}"
+                </p>
                 {question.answerImage && (
                   <img 
                     src={question.answerImage} 
@@ -815,20 +849,27 @@ function App() {
                 <span className="text-[10px] font-bold text-stone-600">{userProfile?.pagesUsed} / {userProfile?.pageLimit}</span>
               </div>
             </div>
-            {user.email === 'asmaomar5566@gmail.com' && (
-              <button 
-                onClick={() => {
-                  if(confirm('هل تريد مسح مفتاح API المحفوظ؟ سيطلب منك التطبيق إدخاله مرة أخرى عند التصحيح القادم.')) {
-                    localStorage.removeItem('GEMINI_API_KEY_FALLBACK');
-                    alert('تم مسح المفتاح بنجاح.');
-                  }
-                }}
-                className="p-2 text-stone-400 hover:text-emerald-600 transition-colors"
-                title="إعادة تعيين مفتاح API"
-              >
-                <Settings className="w-5 h-5" />
-              </button>
-            )}
+              {user.email === 'asmaomar5566@gmail.com' && (
+                <button 
+                  onClick={() => {
+                    const current = localStorage.getItem('GEMINI_API_KEY_FALLBACK') || '';
+                    const key = prompt('أدخل مفتاح Gemini API الجديد (اختياري):', current);
+                    if (key !== null) {
+                      if (key.trim()) {
+                        localStorage.setItem('GEMINI_API_KEY_FALLBACK', key.trim());
+                        alert('تم حفظ المفتاح بنجاح.');
+                      } else {
+                        localStorage.removeItem('GEMINI_API_KEY_FALLBACK');
+                        alert('تم مسح المفتاح، سيتم استخدام المفتاح الافتراضي للمنظمة.');
+                      }
+                    }
+                  }}
+                  className="p-2 text-stone-400 hover:text-emerald-600 transition-colors"
+                  title="إعدادات مفتاح API"
+                >
+                  <Settings className="w-5 h-5" />
+                </button>
+              )}
             <div className="flex items-center gap-2 px-1.5 md:px-3 py-1.5 bg-stone-100 rounded-full">
               <img src={user.photoURL || ''} alt="" className="w-6 h-6 rounded-full" />
               <span className="hidden sm:inline text-sm font-medium">{user.displayName}</span>
@@ -1635,19 +1676,11 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
 
     setIsExtracting(true);
     try {
-      const urlParams = new URLSearchParams(window.location.search);
-      const apiKey = urlParams.get('key') || localStorage.getItem('GEMINI_API_KEY_AUTO') || import.meta.env.VITE_GEMINI_API_KEY;
-      
-      if (!apiKey) {
-        alert('يرجى توفير مفتاح API أولاً');
-        return;
-      }
-
       let result;
       if (extractionMode === 'single') {
-        result = await extractExamFromImages(extractionImages, apiKey);
+        result = await extractExamFromImages(extractionImages);
       } else {
-        result = await extractExamFromDualImages(dualQImages, dualAImages, apiKey);
+        result = await extractExamFromDualImages(dualQImages, dualAImages);
       }
 
       console.log('Extraction result:', result);
@@ -1669,6 +1702,14 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
           }
         }
 
+        const cleanAllQuestionsText = (qs: Question[]): Question[] => {
+          return qs.map(q => ({
+            ...q,
+            text: cleanQuestionText(q.text),
+            subQuestions: q.subQuestions ? cleanAllQuestionsText(q.subQuestions) : []
+          }));
+        };
+
         const ensureIds = (qs: Question[]): Question[] => {
           return qs.map(q => ({
             ...q,
@@ -1676,7 +1717,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
             subQuestions: q.subQuestions ? ensureIds(q.subQuestions) : []
           }));
         };
-        setQuestions(ensureIds(result.questions));
+        setQuestions(ensureIds(cleanAllQuestionsText(result.questions)));
         alert('تم استخراج الأسئلة والأجوبة بنجاح');
       } else {
         alert('تمت المعالجة ولكن لم يتم العثور على بيانات واضحة. يرجى التأكد من جودة الصور.');
@@ -2245,7 +2286,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
               {questions.map((q, idx) => (
                 <div key={q.id} className="space-y-4">
                   <div className="flex justify-between items-start">
-                    <h4 className="text-xl font-bold leading-relaxed">س{idx + 1}: {q.text}</h4>
+                    <h4 className="text-xl font-bold leading-relaxed">س{idx + 1}: {cleanQuestionText(q.text)}</h4>
                     <span className="font-bold">({q.grade} درجة)</span>
                   </div>
                   {q.questionImage && <img src={q.questionImage} className="max-h-64 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
@@ -2264,7 +2305,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                         <div className="flex justify-between">
                           <p className="font-medium leading-relaxed">
                             {q.subStyle === 'letters' ? `${String.fromCharCode(1571 + sqIdx)}- ` : `${sqIdx + 1}- `}
-                            {sq.text}
+                            {cleanQuestionText(sq.text)}
                           </p>
                           <span className="text-sm">({sq.grade} درجة)</span>
                         </div>
@@ -2282,7 +2323,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                           {sq.subQuestions?.map((ssq, ssqIdx) => (
                             <div key={ssq.id} className="space-y-2">
                               <div className="flex justify-between text-sm">
-                                <p className="leading-relaxed">{ssqIdx + 1}- {ssq.text}</p>
+                                <p className="leading-relaxed">{ssqIdx + 1}- {cleanQuestionText(ssq.text)}</p>
                                 <span>({ssq.grade} درجة)</span>
                               </div>
                               {(ssq.answer || ssq.answerImage) && (
@@ -2321,7 +2362,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
               {questions.map((q, idx) => (
                 <div key={q.id} className="p-6 border-2 border-stone-200 rounded-2xl space-y-6">
                   <div className="flex justify-between items-center bg-stone-50 p-3 rounded-xl">
-                    <h4 className="text-xl font-bold leading-relaxed">س{idx + 1}: {q.text}</h4>
+                    <h4 className="text-xl font-bold leading-relaxed">س{idx + 1}: {cleanQuestionText(q.text)}</h4>
                     <span className="bg-stone-900 text-white px-4 py-1 rounded-full text-sm">{q.grade} درجة</span>
                   </div>
                   
@@ -2337,7 +2378,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                     {q.subQuestions?.map((sq, sqIdx) => (
                       <div key={sq.id} className="space-y-6 border-r-2 border-stone-100 pr-4">
                         <div className="flex justify-between font-bold">
-                          <p className="leading-relaxed">{q.subStyle === 'letters' ? `${String.fromCharCode(1571 + sqIdx)}- ` : `${sqIdx + 1}- `} {sq.text}</p>
+                          <p className="leading-relaxed">{q.subStyle === 'letters' ? `${String.fromCharCode(1571 + sqIdx)}- ` : `${sqIdx + 1}- `} {cleanQuestionText(sq.text)}</p>
                           <span>{sq.grade} درجة</span>
                         </div>
                         {sq.answer && (
@@ -2352,7 +2393,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                             {sq.subQuestions.map((ssq, ssqIdx) => (
                               <div key={ssq.id} className="space-y-2 border-r border-stone-100 pr-4">
                                 <div className="flex justify-between font-bold text-sm">
-                                  <p className="leading-relaxed">{ssqIdx + 1}- {ssq.text}</p>
+                                  <p className="leading-relaxed">{ssqIdx + 1}- {cleanQuestionText(ssq.text)}</p>
                                   <span>{ssq.grade} درجة</span>
                                 </div>
                                 {ssq.answer && (
@@ -2809,7 +2850,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
   );
 }
 
-function VisualPaperOverlay({ imageUrl, gradings, studentName, totalGrade, maxGrade, isFirstPage }: any) {
+function VisualPaperOverlay({ imageUrl, gradings, studentName, totalGrade, maxGrade, isFirstPage, onAddMark }: any) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
 
@@ -2818,12 +2859,26 @@ function VisualPaperOverlay({ imageUrl, gradings, studentName, totalGrade, maxGr
     setDimensions({ width: naturalWidth, height: naturalHeight });
   };
 
+  const handleContainerClick = (e: React.MouseEvent) => {
+    if (!onAddMark || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 1000;
+    const y = ((e.clientY - rect.top) / rect.height) * 1000;
+    
+    // Add a default mark at this location (roughly)
+    onAddMark([y - 20, x - 20, y + 20, x + 20]);
+  };
+
   return (
-    <div ref={containerRef} className="relative w-full rounded-2xl overflow-hidden shadow-sm border border-stone-200 bg-stone-100">
+    <div 
+      ref={containerRef} 
+      className="relative w-full rounded-2xl overflow-hidden shadow-sm border border-stone-200 bg-stone-100 cursor-crosshair"
+      onClick={handleContainerClick}
+    >
       <img 
         src={imageUrl} 
         alt="" 
-        className="w-full h-auto block" 
+        className="w-full h-auto block pointer-events-none" 
         onLoad={handleImageLoad}
         crossOrigin="anonymous"
       />
@@ -2837,40 +2892,50 @@ function VisualPaperOverlay({ imageUrl, gradings, studentName, totalGrade, maxGr
           {gradings.map((g: any, i: number) => {
             if (!g.box) return null;
             const [ymin, xmin, ymax, xmax] = g.box;
+            const maxG = g.maxGrade || 0;
             const isCorrect = g.grade > 0;
-            const isFull = g.grade >= (g.maxGrade || 0);
+            const isFull = maxG > 0 && g.grade >= maxG;
+            const isPartialLow = maxG > 0 && isCorrect && g.grade < (maxG * 0.7);
+            
+            // #059669 = Dark Green (Full)
+            // #f59e0b = Amber/Yellow (Partial Low < 70%)
+            // #10b981 = Emerald/Green (Partial High >= 70%)
+            // #dc2626 = Red (Zero)
+            const markColor = isFull ? "#059669" : (isPartialLow ? "#f59e0b" : "#10b981");
+            const finalColor = isCorrect ? markColor : "#dc2626";
 
             return (
               <g key={i}>
                 {/* The Mark (Check or Cross) */}
                 <text 
-                  x={xmax > 900 ? xmin - 10 : xmax + 10} 
-                  y={(ymin + ymax) / 2} 
-                  fontSize="48" 
-                  fill={isCorrect ? "#059669" : "#dc2626"}
-                  className="font-bold select-none drop-shadow-sm"
-                  textAnchor={xmax > 900 ? "end" : "start"}
+                  x={xmax > 850 ? Math.max(xmin - 15, 50) : Math.min(xmax + 15, 950)} 
+                  y={Math.min(Math.max((ymin + ymax) / 2, 50), 950)} 
+                  fontSize="52" 
+                  fill={finalColor}
+                  className="font-bold select-none drop-shadow-md"
+                  textAnchor={xmax > 850 ? "end" : "start"}
                   dominantBaseline="middle"
                 >
                   {isCorrect ? "✓" : "×"}
                 </text>
                 {/* The Grade for the question */}
                 <rect 
-                  x={xmax > 900 ? xmin - 50 : xmax + 50} 
-                  y={ymin} 
-                  width="45" 
-                  height="35" 
-                  rx="6"
+                  x={xmax > 850 ? Math.max(xmin - 75, 10) : Math.min(xmax + 75, 940)} 
+                  y={Math.min(Math.max(ymin, 10), 950)} 
+                  width="50" 
+                  height="40" 
+                  rx="8"
                   fill="white"
-                  fillOpacity="0.9"
-                  stroke={isCorrect ? "#059669" : "#dc2626"}
-                  strokeWidth="2"
+                  fillOpacity="0.95"
+                  stroke={finalColor}
+                  strokeWidth="2.5"
+                  className="drop-shadow-sm"
                 />
                 <text 
-                  x={xmax > 900 ? xmin - 27 : xmax + 72} 
-                  y={ymin + 22} 
-                  fontSize="20" 
-                  fill={isCorrect ? "#059669" : "#dc2626"}
+                  x={xmax > 850 ? Math.max(xmin - 50, 35) : Math.min(xmax + 100, 965)} 
+                  y={Math.min(Math.max(ymin + 26, 36), 976)} 
+                  fontSize="22" 
+                  fill={finalColor}
                   className="font-bold select-none"
                   textAnchor="middle"
                 >
@@ -2903,6 +2968,7 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
   const [gradingMode, setGradingMode] = useState<'digital' | 'paper'>('digital');
   const [isGrading, setIsGrading] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0, phase: '' });
+  const [selectedSubject, setSelectedSubject] = useState<string>(exam.title || 'رياضيات');
   const [gradingResults, setGradingResults] = useState<any[]>([]);
   const [currentResultIndex, setCurrentResultIndex] = useState(0);
   const [targetSessionId, setTargetSessionId] = useState<string>('new');
@@ -2951,6 +3017,7 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
         exam.questions, 
         exam.totalGrade, 
         exam.requiredQuestionsCount,
+        selectedSubject,
         (current, total, phase) => setProgress({ current, total, phase })
       );
       if (!results || results.length === 0) {
@@ -2992,26 +3059,39 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
       let sessionId = targetSessionId;
       
       if (targetSessionId === 'new') {
-        const sessionRef = await addDoc(collection(db, 'sessions'), {
-          examId: exam.id,
-          examTitle: exam.title,
-          sessionName: newSessionName || exam.title,
-          authorUid: user.uid,
-          studentCount: gradingResults.length,
-          createdAt: serverTimestamp()
-        });
-        sessionId = sessionRef.id;
+        try {
+          const sessionRef = await addDoc(collection(db, 'sessions'), {
+            examId: exam.id,
+            examTitle: exam.title,
+            sessionName: newSessionName || exam.title,
+            authorUid: user.uid,
+            studentCount: gradingResults.length,
+            createdAt: serverTimestamp()
+          });
+          sessionId = sessionRef.id;
+        } catch (e) {
+          handleFirestoreError(e, OperationType.CREATE, 'sessions');
+        }
       } else {
-        await updateDoc(doc(db, 'sessions', targetSessionId), {
-          studentCount: increment(gradingResults.length)
-        });
+        try {
+          await updateDoc(doc(db, 'sessions', targetSessionId), {
+            studentCount: increment(gradingResults.length)
+          });
+        } catch (e) {
+          handleFirestoreError(e, OperationType.UPDATE, `sessions/${targetSessionId}`);
+        }
       }
 
       // 2. Save each result with the sessionId
       for (const result of gradingResults) {
         try {
+          // Ensure studentName is not empty to satisfy security rules
+          const studentName = (result.studentName && result.studentName.trim()) 
+            ? result.studentName.trim() 
+            : `طالب #${Math.floor(Math.random() * 1000)}`;
+
           await addDoc(collection(db, 'results'), {
-            studentName: result.studentName,
+            studentName: studentName,
             gradings: result.gradings,
             totalGrade: result.totalGrade,
             sessionId: sessionId,
@@ -3026,9 +3106,20 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
       }
       setShowSaveModal(false);
       onComplete();
-    } catch (e) {
-      console.error(e);
-      alert('حدث خطأ أثناء حفظ النتائج');
+    } catch (e: any) {
+      console.error("Save error details:", e);
+      let errorMsg = 'حدث خطأ أثناء حفظ النتائج';
+      try {
+        const errorData = JSON.parse(e.message);
+        if (errorData.error.includes('permission')) {
+          errorMsg = 'عذراً، لا تملك صلاحية الحفظ. يرجى التأكد من تسجيل الدخول والموافقة على حسابك.';
+        } else {
+          errorMsg = `خطأ: ${errorData.error}`;
+        }
+      } catch {
+        errorMsg = `حدث خطأ: ${e.message}`;
+      }
+      alert(errorMsg);
     } finally {
       setIsSaving(false);
     }
@@ -3093,6 +3184,34 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
           </div>
 
           <div className="flex flex-col items-center gap-2">
+            <div className="w-full max-w-sm space-y-2 mb-4 text-right">
+              <label className="text-sm font-bold text-stone-600 block">مادة الامتحان لتخصيص الذكاء الاصطناعي:</label>
+              {user.email?.toLowerCase()?.trim() === 'asmaomar5566@gmail.com' ? (
+                <select 
+                  value={selectedSubject}
+                  onChange={(e) => setSelectedSubject(e.target.value)}
+                  className="w-full px-4 py-3 rounded-2xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-stone-700"
+                >
+                  <option value="رياضيات">رياضيات (Math)</option>
+                  <option value="أحياء">أحياء (Biology)</option>
+                  <option value="كيمياء">كيمياء (Chemistry)</option>
+                  <option value="فيزياء">فيزياء (Physics)</option>
+                  <option value="قواعد">قواعد اللغة العربية</option>
+                  <option value="إسلامية">تربية إسلامية</option>
+                  <option value="إنجليزي">لغة إنجليزية</option>
+                  <option value="عام">عام / مادة أخرى</option>
+                </select>
+              ) : (
+                <input 
+                  type="text"
+                  value={selectedSubject}
+                  onChange={(e) => setSelectedSubject(e.target.value)}
+                  placeholder="مثلاً: رياضيات، أحياء..."
+                  className="w-full px-4 py-3 rounded-2xl border border-stone-200 bg-white focus:ring-2 focus:ring-emerald-500 outline-none text-right"
+                />
+              )}
+            </div>
+
             <p className="text-[10px] text-emerald-600 font-bold flex items-center gap-1 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
               <HelpCircle className="w-3 h-3" />
               بإمكانك رفع حتى 24 صفحة في المرة الواحدة لضمان سرعة المعالجة
@@ -3170,16 +3289,36 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
           id="current-grading-result"
         >
           <div className="bg-white p-4 sm:p-8 rounded-3xl border border-stone-200 shadow-sm space-y-6">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-6">
-              <div>
-                <span className="text-xs font-bold text-emerald-600 uppercase tracking-wider">
-                  {gradingMode === 'digital' ? 'تم التصحيح بنجاح' : 'تصحيح ورقي مباشر'}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-6 border-b border-stone-100 pb-8">
+              <div className="text-center sm:text-right">
+                <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-[0.2em] mb-1 block">
+                  {gradingMode === 'digital' ? 'تقرير التصحيح الرقمي' : 'عرض التصحيح الورقي'}
                 </span>
-                <h3 className="text-xl sm:text-2xl font-bold mt-1">الطالب: {currentGrading.studentName}</h3>
+                <h3 className="text-2xl sm:text-3xl font-black text-stone-900 leading-tight">
+                  {currentGrading.studentName}
+                </h3>
+                <div className="mt-2 flex items-center gap-2 text-stone-400 text-sm font-medium">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  تم رصد النتيجة النهائية بنجاح
+                </div>
               </div>
-              <div className="text-right">
-                <span className="text-stone-400 text-sm">المجموع الكلي</span>
-                <div className="text-2xl sm:text-4xl font-bold text-emerald-600">{currentGrading.totalGrade} <span className="text-lg text-stone-300">/ {exam.totalGrade}</span></div>
+              
+              <div className="relative group">
+                <div className="absolute -inset-4 bg-emerald-100 rounded-[2.5rem] opacity-30 blur-xl group-hover:opacity-50 transition-opacity" />
+                <div className="relative bg-emerald-50/50 border-2 border-emerald-100/50 px-8 py-6 rounded-[2rem] flex flex-col items-center justify-center min-w-[200px]">
+                  <span className="text-[11px] font-black text-emerald-800 uppercase tracking-widest mb-1 underline decoration-emerald-200 underline-offset-4">
+                    الدرجة النهائية
+                  </span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-5xl sm:text-6xl font-black text-emerald-600 tracking-tighter">
+                      {currentGrading.totalGrade}
+                    </span>
+                    <span className="text-xl sm:text-2xl font-bold text-emerald-300">/ {exam.totalGrade}</span>
+                  </div>
+                  <div className={`absolute -top-3 -right-3 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg rotate-12 ${Number(currentGrading.totalGrade) >= (Number(exam.totalGrade) * 0.5) ? 'bg-emerald-600 shadow-emerald-200' : 'bg-red-500 shadow-red-200'}`}>
+                    {Number(currentGrading.totalGrade) >= (Number(exam.totalGrade) * 0.5) ? 'ناجـح' : 'راسب'}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -3220,6 +3359,21 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
                         totalGrade={currentGrading.totalGrade}
                         maxGrade={exam.totalGrade}
                         isFirstPage={i === 0}
+                        onAddMark={(box: [number, number, number, number]) => {
+                          const newGrading = {
+                            questionId: `manual_${Date.now()}`,
+                            studentAnswer: 'تأشير يدوي',
+                            grade: 1, // Default grade
+                            feedback: 'تمت الإضافة يدوياً',
+                            box,
+                            pageIndex: pageIdx
+                          };
+                          const newGradings = [...currentGrading.gradings, newGrading];
+                          const newTotal = newGradings.reduce((acc: any, curr: any) => acc + curr.grade, 0);
+                          const newResults = [...gradingResults];
+                          newResults[currentResultIndex] = { ...currentGrading, gradings: newGradings, totalGrade: newTotal };
+                          setGradingResults(newResults);
+                        }}
                       />
                     </div>
                   ))
@@ -3335,7 +3489,7 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
                   initial={{ opacity: 0, scale: 0.9, y: 20 }}
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                  className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl overflow-hidden"
+                  className="relative w-full max-w-xl bg-white rounded-3xl shadow-2xl overflow-hidden"
                 >
                   <div className="p-8 space-y-6">
                     <div className="flex items-center gap-3 text-emerald-600">
@@ -3343,9 +3497,28 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
                         <Folder className="w-6 h-6" />
                       </div>
                       <div>
-                        <h3 className="text-xl font-bold text-stone-900">حفظ النتائج</h3>
-                        <p className="text-stone-400 text-sm">اختر كيف تريد تنظيم هذه النتائج</p>
+                        <h3 className="text-xl font-bold text-stone-900">مراجعة وحفظ النتائج</h3>
+                        <p className="text-stone-400 text-sm">سيتم حفظ {gradingResults.length} طالباً في المجلد</p>
                       </div>
+                    </div>
+
+                    {/* Simple summary of grades */}
+                    <div className="bg-stone-50 rounded-2xl p-4 max-h-48 overflow-y-auto border border-stone-100 space-y-2">
+                       {gradingResults.map((res: any, idx: number) => (
+                         <div key={idx} className="flex items-center justify-between py-2 border-b border-stone-100 last:border-0 px-2">
+                           <div className="flex items-center gap-2">
+                             <span className="w-6 h-6 bg-stone-200 rounded-full text-[10px] flex items-center justify-center font-mono">{idx + 1}</span>
+                             <span className="font-bold text-stone-700 text-sm truncate max-w-[200px]">{res.studentName || 'طالب غير معروف'}</span>
+                           </div>
+                           <div className="flex items-center gap-1">
+                             <span className="text-stone-400 text-xs">الدرجة:</span>
+                             <span className={`font-bold ${res.totalGrade >= (exam.totalGrade * 0.5) ? 'text-emerald-600' : 'text-red-500'}`}>
+                               {res.totalGrade}
+                             </span>
+                             <span className="text-stone-300 text-[10px]">/ {exam.totalGrade}</span>
+                           </div>
+                         </div>
+                       ))}
                     </div>
 
                     <div className="space-y-4">
@@ -3503,6 +3676,14 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
 
   const sessionResults = results.filter((r: any) => r.sessionId === selectedSession?.id);
 
+  const copyResultsToClipboard = () => {
+    const tableHeader = "اسم الطالب\tالدرجة\n";
+    const tableData = sessionResults.map((r: any) => `${r.studentName || 'بدون اسم'}\t${r.totalGrade}`).join('\n');
+    navigator.clipboard.writeText(tableHeader + tableData)
+      .then(() => alert('تم نسخ القائمة (لصق في إكسل مباشرة)'))
+      .catch((err) => console.error('Failed to copy: ', err));
+  };
+
   const deleteSession = async (e: React.MouseEvent, session: any) => {
     e.stopPropagation();
     if (!confirm(`هل أنت متأكد من حذف المجلد "${session.sessionName || session.examTitle}"؟ سيتم حذف جميع نتائج الطلاب المرتبطة به.`)) return;
@@ -3607,6 +3788,13 @@ function ResultsView({ results, sessions, exams, onBack }: any) {
             >
               {isExportingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
               تحميل كل النتائج (PDF)
+            </button>
+            <button 
+              onClick={copyResultsToClipboard}
+              className="w-full sm:w-auto bg-stone-100 text-stone-600 px-6 py-3 rounded-xl flex items-center justify-center gap-2 hover:bg-stone-200 transition-colors font-bold border border-stone-200"
+            >
+              <LayoutGrid className="w-4 h-4" />
+              نسخ للجدول (EXCEL)
             </button>
           </div>
         </div>
