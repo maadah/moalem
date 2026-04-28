@@ -370,6 +370,19 @@ const generatePDFFromElement = async (element: HTMLElement, fileName: string, op
 };
 
 // --- Helper to clean redundant labels from text ---
+const calculateGradingTotal = (gradings: any[]): number => {
+  if (!gradings) return 0;
+  return gradings.reduce((acc, g) => acc + (Number(g.grade) || 0), 0);
+};
+
+const formatGrade = (grade: number | string | undefined | null) => {
+  if (grade === undefined || grade === null || grade === "") return "?";
+  const num = Number(grade);
+  if (isNaN(num)) return grade.toString();
+  // If it's a whole number, return it as is. If it has decimals, limit to 1 decimal place.
+  return num % 1 === 0 ? num.toString() : num.toFixed(1).replace(/\.0$/, '');
+};
+
 const calculateRecursiveTotalGrade = (qs: any[]): number => {
   if (!qs) return 0;
   return qs.reduce((acc, q) => {
@@ -445,10 +458,10 @@ function GradingResultItem({ question, gradings, onGradeChange, level = 1 }: any
               />
             ) : (
               <div className="px-4 py-2 bg-white rounded-xl border border-stone-200 font-bold text-emerald-600 shadow-sm">
-                {grading.grade}
+                {formatGrade(grading.grade)}
               </div>
             )}
-            <span className="text-stone-400 font-medium">/ {question.grade || grading?.maxGrade || '?'}</span>
+            <span className="text-stone-400 font-medium">/ {formatGrade(question.grade || grading?.maxGrade)}</span>
           </div>
         )}
       </div>
@@ -2297,7 +2310,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                 <div key={q.id} className="space-y-4">
                   <div className="flex justify-between items-start">
                     <h4 className="text-xl font-bold leading-relaxed">س{idx + 1}: {cleanQuestionText(q.text)}</h4>
-                    <span className="font-bold">({q.grade} درجة)</span>
+                    <span className="font-bold">({formatGrade(q.grade)} درجة)</span>
                   </div>
                   {q.questionImage && <img src={q.questionImage} className="max-h-64 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
                   
@@ -2317,7 +2330,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                             {q.subStyle === 'letters' ? `${String.fromCharCode(1571 + sqIdx)}- ` : `${sqIdx + 1}- `}
                             {cleanQuestionText(sq.text)}
                           </p>
-                          <span className="text-sm">({sq.grade} درجة)</span>
+                          <span className="text-sm">({formatGrade(sq.grade)} درجة)</span>
                         </div>
                         {sq.questionImage && <img src={sq.questionImage} className="max-h-48 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
                         
@@ -2334,7 +2347,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                             <div key={ssq.id} className="space-y-2">
                               <div className="flex justify-between text-sm">
                                 <p className="leading-relaxed">{ssqIdx + 1}- {cleanQuestionText(ssq.text)}</p>
-                                <span>({ssq.grade} درجة)</span>
+                                <span>({formatGrade(ssq.grade)} درجة)</span>
                               </div>
                               {(ssq.answer || ssq.answerImage) && (
                                 <div className="text-xs text-stone-500 border-r-2 border-stone-100 pr-3 mr-2">
@@ -2373,7 +2386,7 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                 <div key={q.id} className="p-6 border-2 border-stone-200 rounded-2xl space-y-6">
                   <div className="flex justify-between items-center bg-stone-50 p-3 rounded-xl">
                     <h4 className="text-xl font-bold leading-relaxed">س{idx + 1}: {cleanQuestionText(q.text)}</h4>
-                    <span className="bg-stone-900 text-white px-4 py-1 rounded-full text-sm">{q.grade} درجة</span>
+                    <span className="bg-stone-900 text-white px-4 py-1 rounded-full text-sm">{formatGrade(q.grade)} درجة</span>
                   </div>
                   
                   {(q.answer || q.answerImage) && (
@@ -3097,6 +3110,9 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
       // 2. Save each result with the sessionId
       for (const result of gradingResults) {
         try {
+          // Recalculate total grade to ensure it's accurate from the final corrected marks
+          const computedTotal = calculateGradingTotal(result.gradings);
+          
           // Ensure studentName is not empty to satisfy security rules
           const studentName = (result.studentName && result.studentName.trim()) 
             ? result.studentName.trim() 
@@ -3105,7 +3121,7 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
           await addDoc(collection(db, 'results'), {
             studentName: studentName,
             gradings: result.gradings,
-            totalGrade: result.totalGrade,
+            totalGrade: computedTotal,
             sessionId: sessionId,
             examId: exam.id,
             examTitle: exam.title,
@@ -3138,6 +3154,7 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
   };
 
   const currentGrading = gradingResults[currentResultIndex];
+  const realTotalGrade = calculateGradingTotal(currentGrading?.gradings);
 
   return (
     <motion.div 
@@ -3323,18 +3340,9 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
                   </span>
                   <div className="flex items-baseline gap-1">
                     <span className="text-5xl sm:text-6xl font-black text-emerald-600 tracking-tighter">
-                      {currentGrading.totalGrade}
+                      {formatGrade(realTotalGrade)}
                     </span>
-                    <span className="text-xl sm:text-2xl font-bold text-emerald-300">/ {exam.totalGrade || calculateRecursiveTotalGrade(exam.questions) || '?'}</span>
-                  </div>
-                  <div className={`absolute -top-3 -right-3 text-white text-[10px] font-bold px-3 py-1 rounded-full shadow-lg rotate-12 ${(() => {
-                    const max = Number(exam.totalGrade) || calculateRecursiveTotalGrade(exam.questions) || 100;
-                    return Number(currentGrading.totalGrade) >= (max * 0.5);
-                  })() ? 'bg-emerald-600 shadow-emerald-200' : 'bg-red-500 shadow-red-200'}`}>
-                    {(() => {
-                      const max = Number(exam.totalGrade) || calculateRecursiveTotalGrade(exam.questions) || 100;
-                      return Number(currentGrading.totalGrade) >= (max * 0.5);
-                    })() ? 'ناجـح' : 'راسب'}
+                    <span className="text-xl sm:text-2xl font-bold text-emerald-300">/ {formatGrade(exam.totalGrade || calculateRecursiveTotalGrade(exam.questions))}</span>
                   </div>
                 </div>
               </div>

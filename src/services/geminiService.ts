@@ -61,6 +61,7 @@ export async function extractExamFromDualImages(
     CRITICAL: 
     - Preserve Arabic digits (٠-٩).
     - For sub-questions (e.g. branch A, B, or numbers 1, 2), nest them inside the parent question.
+    - GRADE EXTRACTION: Strictly copy the grade written on the paper. DO NOT divide the parent grade among sub-questions yourself. If sub-questions don't have individual grades on the paper, leave their 'grade' field null or empty.
     - IMPORTANT: Clean the 'text' field by removing redundant identifiers (like "س1:", "أ-", "1-") at the beginning of the text IF they are already represented by the structure.
     - If a question has sub-questions, the parent 'text' should be the general instruction only. 
     - If images are text-only, extract the full text.`;
@@ -113,6 +114,7 @@ export async function extractExamFromImages(base64Images: string[]): Promise<{ t
     CRITICAL: 
     - Preserve Arabic digits (٠-٩). 
     - Nest sub-questions properly.
+    - GRADE EXTRACTION: Strictly copy original grades. DO NOT invent or divide grades for sub-questions.
     - IMPORTANT: Clean the 'text' field by removing redundant identifiers (like "س1:", "أ-", "1-") at the beginning of the text IF they are already represented by the structure.
     - If a question has sub-questions, the parent 'text' should be the general instruction only.`;
 
