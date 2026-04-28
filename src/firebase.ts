@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 const firebaseConfig = {
@@ -34,4 +34,10 @@ try {
 
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId || "(default)");
 export const auth = getAuth(app);
+
+// Set persistence to Local to help with iframe/storage-partitioned environments
+setPersistence(auth, browserLocalPersistence).catch(err => {
+  console.error("Failed to set Firebase persistence:", err);
+});
+
 export const storage = getStorage(app);
