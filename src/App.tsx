@@ -860,6 +860,7 @@ function App() {
           {view === 'dashboard' && (
             <Dashboard 
               exams={exams} 
+              userProfile={userProfile}
               onNewExam={() => { setEditingExam(null); setView('create-exam'); }} 
               onGrade={(exam) => { setSelectedExam(exam); setView('grade-papers'); }}
               onEditExam={(exam) => { setEditingExam(exam); setView('create-exam'); }}
@@ -1322,7 +1323,33 @@ function NavButton({ active, onClick, icon, label, mobile = false }: { active: b
   );
 }
 
-function Dashboard({ exams, onNewExam, onGrade, onEditExam, onDeleteExam }: any) {
+function StatCard({ icon, label, value, color, description }: { icon: React.ReactNode, label: string, value: string | number, color: string, description?: string }) {
+  const colorMap: any = {
+    emerald: "bg-emerald-50 text-emerald-600 border-emerald-100",
+    blue: "bg-blue-50 text-blue-600 border-blue-100",
+    amber: "bg-amber-50 text-amber-600 border-amber-100",
+    purple: "bg-purple-50 text-purple-600 border-purple-100"
+  };
+
+  return (
+    <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-sm space-y-2">
+      <div className="flex items-center gap-3">
+        <div className={cn("p-2 rounded-xl border", colorMap[color] || "bg-stone-50 border-stone-100")}>
+          {icon}
+        </div>
+        <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wider">{label}</span>
+      </div>
+      <div className="flex flex-col">
+        <span className="text-2xl font-bold text-stone-900">{value}</span>
+        {description && <span className="text-[9px] text-stone-400">{description}</span>}
+      </div>
+    </div>
+  );
+}
+
+function Dashboard({ exams, userProfile, onNewExam, onGrade, onEditExam, onDeleteExam }: any) {
+  const totalQuestions = exams.reduce((acc: number, exam: any) => acc + (exam.questions?.length || 0), 0);
+
   return (
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
@@ -1333,7 +1360,7 @@ function Dashboard({ exams, onNewExam, onGrade, onEditExam, onDeleteExam }: any)
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl md:text-3xl font-bold font-serif italic mb-1">مرحباً بك مجدداً</h2>
-          <p className="text-sm md:text-base text-stone-500">إليك الامتحانات التي قمت بإنشائها</p>
+          <p className="text-sm md:text-base text-stone-500">إليك نظرة سريعة على نشاطك الحالي</p>
         </div>
         <button 
           onClick={onNewExam}
@@ -1343,6 +1370,37 @@ function Dashboard({ exams, onNewExam, onGrade, onEditExam, onDeleteExam }: any)
           <Plus className="w-5 h-5" />
           امتحان جديد
         </button>
+      </div>
+
+      {/* User Stats Overview */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard 
+          icon={<FileText className="w-5 h-5 text-emerald-600" />} 
+          label="الامتحانات" 
+          value={exams.length} 
+          color="emerald" 
+        />
+        <StatCard 
+          icon={<CheckSquare className="w-5 h-5 text-blue-600" />} 
+          label="إجمالي الأسئلة" 
+          value={totalQuestions} 
+          color="blue" 
+          description="في كل امتحاناتك"
+        />
+        <StatCard 
+          icon={<Layers className="w-5 h-5 text-amber-600" />} 
+          label="أسئلة مستخرجة" 
+          value={userProfile?.questionsCount || 0} 
+          color="amber" 
+          description="إجمالي الاستخراج الذكي"
+        />
+        <StatCard 
+          icon={<CheckCircle className="w-5 h-5 text-purple-600" />} 
+          label="أوراق مصححة" 
+          value={userProfile?.gradingsCount || 0} 
+          color="purple" 
+          description="إجمالي التقديرات"
+        />
       </div>
 
       <div className="bg-stone-50 border border-stone-200 p-6 rounded-3xl flex flex-col md:flex-row items-center gap-6 justify-between">
@@ -1558,14 +1616,14 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
       if (result.requiredQuestionsCount) setRequiredQuestionsCount(result.requiredQuestionsCount);
       
       if (result.questions && result.questions.length > 0) {
-        // Update user pagesUsed
+        // Update user usage stats
         if (userProfile) {
           const totalPages = extractionMode === 'single' ? extractionImages.length : (dualQImages.length + dualAImages.length);
           try {
-            await setDoc(doc(db, 'users', user.uid), {
-              pagesUsed: (userProfile.pagesUsed || 0) + totalPages,
-              questionsCount: (userProfile.questionsCount || 0) + (result.questions?.length || 0)
-            }, { merge: true });
+            await updateDoc(doc(db, 'users', user.uid), {
+              pagesUsed: increment(totalPages),
+              questionsCount: increment(result.questions?.length || 0)
+            });
           } catch (e) {
             handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`);
           }
@@ -1761,6 +1819,12 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
         }
       } else {
         try {
+          // If manual mode, update questionsCount as it wasn't updated during extraction
+          if (extractionMode === 'manual' || !extractionMode) {
+            await updateDoc(doc(db, 'users', user.uid), {
+              questionsCount: increment(questions.length)
+            });
+          }
           await addDoc(collection(db, 'exams'), {
             ...examData,
             createdAt: serverTimestamp()
@@ -2146,10 +2210,11 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                   </div>
                   {q.questionImage && <img src={q.questionImage} className="max-h-64 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
                   
-                  {q.answer && (
+                  {(q.answer || q.answerImage) && (
                     <div className="text-emerald-700 bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 mb-6">
                       <p className="font-bold mb-1 underline">الإجابة النموذجية:</p>
-                      <p className="whitespace-pre-wrap">{q.answer}</p>
+                      {q.answer && <p className="whitespace-pre-wrap">{q.answer}</p>}
+                      {q.answerImage && <img src={q.answerImage} className="mt-2 max-h-64 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
                     </div>
                   )}
 
@@ -2165,10 +2230,11 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                         </div>
                         {sq.questionImage && <img src={sq.questionImage} className="max-h-48 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
                         
-                        {sq.answer && (
+                        {(sq.answer || sq.answerImage) && (
                           <div className="text-sm text-stone-500 border-r-2 border-stone-100 pr-3 mr-2 mb-4">
                             <span className="font-bold">الجواب: </span>
-                            <span>{sq.answer}</span>
+                            {sq.answer && <span>{sq.answer}</span>}
+                            {sq.answerImage && <img src={sq.answerImage} className="mt-1 max-h-48 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
                           </div>
                         )}
                         
@@ -2179,10 +2245,11 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                                 <p className="leading-relaxed">{ssqIdx + 1}- {ssq.text}</p>
                                 <span>({ssq.grade} درجة)</span>
                               </div>
-                              {ssq.answer && (
+                              {(ssq.answer || ssq.answerImage) && (
                                 <div className="text-xs text-stone-500 border-r-2 border-stone-100 pr-3 mr-2">
                                   <span className="font-bold">الجواب: </span>
-                                  <span>{ssq.answer}</span>
+                                  {ssq.answer && <span>{ssq.answer}</span>}
+                                  {ssq.answerImage && <img src={ssq.answerImage} className="mt-1 max-h-32 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
                                 </div>
                               )}
                             </div>
@@ -2218,10 +2285,10 @@ function ExamCreator({ user, userProfile, initialData, onSave, onCancel }: any) 
                     <span className="bg-stone-900 text-white px-4 py-1 rounded-full text-sm">{q.grade} درجة</span>
                   </div>
                   
-                  {q.answer && (
+                  {(q.answer || q.answerImage) && (
                     <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
                       <p className="text-emerald-800 font-bold mb-2">الإجابة النموذجية:</p>
-                      <p className="whitespace-pre-wrap">{q.answer}</p>
+                      {q.answer && <p className="whitespace-pre-wrap">{q.answer}</p>}
                       {q.answerImage && <img src={q.answerImage} className="mt-4 max-h-64 object-contain rounded-lg" referrerPolicy="no-referrer" crossOrigin="anonymous" />}
                     </div>
                   )}
@@ -2850,12 +2917,12 @@ function Grader({ user, userProfile, exam, sessions, onComplete, onCancel }: any
         throw new Error("لم يتم العثور على نتائج في الأوراق المرفوعة. تأكد من وضوح الصور وجودة الخط.");
       }
 
-      // Update user pagesUsed
+      // Update user usage stats atomically
       if (userProfile) {
         try {
           await setDoc(doc(db, 'users', user.uid), {
-            pagesUsed: (userProfile.pagesUsed || 0) + images.length,
-            gradingsCount: (userProfile.gradingsCount || 0) + results.length
+            pagesUsed: increment(images.length),
+            gradingsCount: increment(results.length)
           }, { merge: true });
         } catch (e) {
           handleFirestoreError(e, OperationType.UPDATE, `users/${user.uid}`);
