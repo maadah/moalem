@@ -6,7 +6,7 @@ import {
   LogOut, Loader2, FileUp, List, Settings, User,
   HelpCircle, CheckSquare, Type, LayoutGrid, Image as ImageIcon,
   ArrowRight, Calendar, Folder, FolderOpen, Users, Camera, Layers,
-  Phone, MessageCircle, Printer, BookOpen, PlusCircle
+  Phone, MessageCircle, Printer, BookOpen, PlusCircle, Bell, Eye
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -141,6 +141,7 @@ interface UserProfile {
   gradingsCount: number;
   pagesUsed: number;
   createdAt: any;
+  isNew?: boolean;
 }
 
 enum OperationType {
@@ -510,10 +511,10 @@ function App() {
     const q = query(collection(db, 'users'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const allUsers = snapshot.docs.map(doc => doc.data());
-      const pCount = allUsers.filter((u: any) => !u.status || u.status === 'pending').length;
-      console.log("Nav: Calculated pending count (inclusive):", pCount);
-      setPendingCount(pCount);
-    }, (error) => console.error("Pending users listener error:", error));
+      const newCount = allUsers.filter((u: any) => u.isNew).length;
+      console.log("Nav: Calculated new registrations count:", newCount);
+      setPendingCount(newCount);
+    }, (error) => console.error("Users listener error:", error));
     return () => unsubscribe();
   }, [user?.email, userProfile?.role]);
 
@@ -557,8 +558,9 @@ function App() {
               uid: u.uid,
               email: u.email || '',
               displayName: u.displayName || '',
-              status: isAdminEmail ? 'approved' : 'pending',
+              status: 'approved', // Always approved now
               role: isAdminEmail ? 'admin' : 'user',
+              isNew: !isAdminEmail, // Mark as new for admin notification
               pageLimit: 100,
               pagesUsed: 0,
               questionsCount: 0,
@@ -949,17 +951,22 @@ function AdminDashboard() {
     }
   };
 
-  const pendingUsers = users.filter(u => !u.status || (u.status as string) === 'pending');
-  const activeUsers = users.filter(u => (u.status as string) === 'approved' && (u.role !== 'admin' || u.email?.toLowerCase()?.trim() === 'asmaomar5566@gmail.com'));
+  const acknowledgeNewUser = async (uid: string) => {
+    try {
+      await updateDoc(doc(db, 'users', uid), { isNew: false });
+    } catch (e) {
+      handleFirestoreError(e, OperationType.UPDATE, `users/${uid}`);
+    }
+  };
+
+  const newUsers = users.filter(u => u.isNew);
+  const allOtherUsers = users.filter(u => !u.isNew && (u.role !== 'admin' || u.email?.toLowerCase()?.trim() === 'asmaomar5566@gmail.com'));
 
   useEffect(() => {
     console.log("AdminDashboard Check: Total users:", users.length);
-    console.log("AdminDashboard Check: Pending users:", pendingUsers.length);
-    console.log("AdminDashboard Check: Active users:", activeUsers.length);
-    if (users.length > 0) {
-      console.log("AdminDashboard Check: First user status:", users[0].status);
-    }
-  }, [users, pendingUsers.length, activeUsers.length]);
+    console.log("AdminDashboard Check: New users:", newUsers.length);
+    console.log("AdminDashboard Check: Active users:", allOtherUsers.length);
+  }, [users, newUsers.length, allOtherUsers.length]);
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-emerald-600" /></div>;
 
@@ -972,15 +979,18 @@ function AdminDashboard() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
           <h2 className="text-2xl md:text-3xl font-bold font-serif italic">لوحة تحكم المدير</h2>
-          <p className="text-xs text-stone-400">إدارة المستخدمين والصلاحيات وباقات الصفحات</p>
+          <p className="text-xs text-stone-400">إدارة المستخدمين والصلاحيات ومتابعة التسجيلات الجديدة</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-xl text-sm font-bold shadow-sm">
-            إجمالي السجلات في القاعدة: {users.length}
+            إجمالي المستخدمين: {users.length}
           </div>
-          <div className="bg-stone-100 text-stone-600 px-4 py-2 rounded-xl text-sm font-bold shadow-sm flex items-center gap-2">
-            قيد الانتظار: {pendingUsers.length}
-          </div>
+          {newUsers.length > 0 && (
+            <div className="bg-blue-100 text-blue-600 px-4 py-2 rounded-xl text-sm font-bold shadow-sm flex items-center gap-2 animate-pulse">
+              <Bell className="w-4 h-4" />
+              جديد: {newUsers.length}
+            </div>
+          )}
         </div>
       </div>
 
@@ -992,38 +1002,32 @@ function AdminDashboard() {
         </div>
       )}
 
-      {pendingUsers.length > 0 && (
+      {newUsers.length > 0 && (
         <div className="space-y-4">
-          <h3 className="text-xl font-bold text-amber-600 flex items-center gap-2">
-            <Loader2 className="w-5 h-5 animate-spin" />
-            طلبات انضمام جديدة ({pendingUsers.length})
+          <h3 className="text-lg font-bold text-blue-600 flex items-center gap-2">
+            تسجيلات جديدة لم تطلع عليها بعد ({newUsers.length})
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {pendingUsers.map(u => (
-              <div key={u.uid} className="bg-white p-6 rounded-3xl border border-amber-200 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+            {newUsers.map(u => (
+              <div key={u.uid} className="bg-white p-6 rounded-3xl border border-blue-200 shadow-md flex flex-col sm:flex-row items-center justify-between gap-4 relative overflow-hidden">
+                <div className="absolute top-0 right-0 w-1 h-full bg-blue-500"></div>
                 <div className="flex items-center gap-4 w-full">
-                  <div className="w-12 h-12 bg-stone-100 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-stone-400">
+                  <div className="w-12 h-12 bg-blue-50 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-blue-600">
                     {u.displayName?.charAt(0) || u.email?.charAt(0) || '?'}
                   </div>
                   <div className="min-w-0">
                     <p className="font-bold truncate">{u.displayName || 'بدون اسم'}</p>
-                    <p className="text-xs text-stone-400 truncate">{u.email}</p>
+                    <p className="text-xs text-stone-400 truncate mb-1">{u.email}</p>
+                    <p className="text-[10px] text-blue-400 font-bold">انضم: {u.createdAt ? new Date(u.createdAt.seconds * 1000).toLocaleString('ar-EG') : 'الآن'}</p>
                   </div>
                 </div>
-                <div className="flex gap-2 w-full sm:w-auto">
-                  <button 
-                    onClick={() => updateUserStatus(u.uid, 'approved')}
-                    className="flex-1 sm:flex-none bg-emerald-600 text-white px-6 py-2 rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors"
-                  >
-                    قبول
-                  </button>
-                  <button 
-                    onClick={() => updateUserStatus(u.uid, 'rejected')}
-                    className="flex-1 sm:flex-none bg-red-50 text-red-600 px-6 py-2 rounded-xl text-sm font-bold hover:bg-red-100 transition-colors"
-                  >
-                    رفض
-                  </button>
-                </div>
+                <button 
+                  onClick={() => acknowledgeNewUser(u.uid)}
+                  className="w-full sm:w-auto bg-blue-600 text-white px-5 py-2 rounded-xl text-sm font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  تمييز كمقروء
+                </button>
               </div>
             ))}
           </div>
@@ -1031,7 +1035,7 @@ function AdminDashboard() {
       )}
 
       <div className="space-y-4">
-        <h3 className="text-xl font-bold">المستخدمين النشطين</h3>
+        <h3 className="text-xl font-bold">قائمة الأعضاء ({users.length})</h3>
         
         {/* Desktop Table */}
         <div className="hidden lg:block bg-white rounded-3xl border border-stone-200 overflow-hidden shadow-sm">
@@ -1039,26 +1043,32 @@ function AdminDashboard() {
             <thead className="bg-stone-50 border-b border-stone-200">
               <tr>
                 <th className="px-6 py-4 text-sm font-bold text-stone-500">المستخدم</th>
-                <th className="px-6 py-4 text-sm font-bold text-stone-500">الاستهلاك (صفحات)</th>
-                <th className="px-6 py-4 text-sm font-bold text-stone-500">أسئلة مستخرجة</th>
-                <th className="px-6 py-4 text-sm font-bold text-stone-500">أوراق مصححة</th>
+                <th className="px-6 py-4 text-sm font-bold text-stone-500">تاريخ الانضمام</th>
+                <th className="px-6 py-4 text-sm font-bold text-stone-500">الاستهلاك</th>
+                <th className="px-6 py-4 text-sm font-bold text-stone-500">البيانات</th>
                 <th className="px-6 py-4 text-sm font-bold text-stone-500">الحد</th>
                 <th className="px-6 py-4 text-sm font-bold text-stone-500">الإجراءات</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-stone-100">
-              {activeUsers.map(u => (
-                <tr key={u.uid} className="hover:bg-stone-50 transition-colors">
+              {users.map(u => (
+                <tr key={u.uid} className={cn("hover:bg-stone-50 transition-colors", u.isNew && "bg-blue-50/20")}>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-stone-100 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-stone-400">
+                      <div className={cn("w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold", u.isNew ? "bg-blue-100 text-blue-600" : "bg-stone-100 text-stone-400")}>
                         {u.displayName?.charAt(0) || u.email?.charAt(0) || '?'}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-bold truncate">{u.displayName || 'بدون اسم'}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-bold truncate">{u.displayName || 'بدون اسم'}</p>
+                          {u.isNew && <span className="bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded text-[8px] font-bold">جديد</span>}
+                        </div>
                         <p className="text-[10px] text-stone-400 truncate">{u.email}</p>
                       </div>
                     </div>
+                  </td>
+                  <td className="px-6 py-4 text-[11px] text-stone-500">
+                    {u.createdAt ? new Date(u.createdAt.seconds * 1000).toLocaleDateString('ar-EG') : '-'}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
@@ -1071,8 +1081,12 @@ function AdminDashboard() {
                       <span className="text-xs font-bold">{u.pagesUsed || 0}</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-sm font-medium text-stone-600">{u.questionsCount || 0}</td>
-                  <td className="px-6 py-4 text-sm font-medium text-stone-600">{u.gradingsCount || 0}</td>
+                  <td className="px-6 py-4 text-[10px] text-stone-500">
+                    <div className="flex flex-col">
+                      <span>أسئلة: {u.questionsCount || 0}</span>
+                      <span>تصحيح: {u.gradingsCount || 0}</span>
+                    </div>
+                  </td>
                   <td className="px-6 py-4">
                     <select 
                       value={u.pageLimit}
@@ -1102,16 +1116,20 @@ function AdminDashboard() {
 
         {/* Mobile/Tablet Cards */}
         <div className="lg:hidden space-y-4">
-          {activeUsers.map(u => (
-            <div key={u.uid} className="bg-white p-5 rounded-3xl border border-stone-200 shadow-sm space-y-4">
+          {users.map(u => (
+            <div key={u.uid} className={cn("bg-white p-5 rounded-3xl border shadow-sm space-y-4", u.isNew ? "border-blue-200 bg-blue-50/10" : "border-stone-200")}>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-stone-100 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-stone-400">
+                  <div className={cn("w-10 h-10 rounded-full flex-shrink-0 flex items-center justify-center font-bold", u.isNew ? "bg-blue-100 text-blue-600" : "bg-stone-100 text-stone-400")}>
                     {u.displayName?.charAt(0) || u.email?.charAt(0) || '?'}
                   </div>
                   <div>
-                    <p className="font-bold text-sm">{u.displayName || 'بدون اسم'}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-sm">{u.displayName || 'بدون اسم'}</p>
+                      {u.isNew && <span className="bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded text-[8px] font-bold">جديد</span>}
+                    </div>
                     <p className="text-[10px] text-stone-400">{u.email}</p>
+                    <p className="text-[9px] text-stone-400 mt-0.5">انضم: {u.createdAt ? new Date(u.createdAt.seconds * 1000).toLocaleDateString('ar-EG') : '-'}</p>
                   </div>
                 </div>
                 <button 
@@ -1122,56 +1140,63 @@ function AdminDashboard() {
                 </button>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 py-3 border-y border-stone-50">
-                <div className="text-center">
-                  <p className="text-[10px] text-stone-400 mb-1">صفحات</p>
-                  <p className="text-sm font-bold text-emerald-600">{u.pagesUsed}</p>
+              <div className="grid grid-cols-2 gap-3 py-3 border-y border-stone-50">
+                <div>
+                  <p className="text-[9px] text-stone-400 mb-0.5">الاستهلاك</p>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-1 bg-stone-100 rounded-full overflow-hidden">
+                      <div 
+                        className={cn("h-full", (u.pagesUsed / u.pageLimit) > 0.9 ? "bg-red-500" : "bg-emerald-500")}
+                        style={{ width: `${Math.min(100, (u.pagesUsed / u.pageLimit) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="text-[10px] font-bold">{u.pagesUsed || 0}</span>
+                  </div>
                 </div>
-                <div className="text-center border-x border-stone-100">
-                  <p className="text-[10px] text-stone-400 mb-1">أسئلة</p>
-                  <p className="text-sm font-bold text-stone-700">{u.questionsCount || 0}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] text-stone-400 mb-1">تصحيح</p>
-                  <p className="text-sm font-bold text-stone-700">{u.gradingsCount || 0}</p>
+                <div className="flex items-center justify-around border-r border-stone-100">
+                  <div className="text-center">
+                    <p className="text-[9px] text-stone-400 mb-0.5">أسئلة</p>
+                    <p className="text-xs font-bold">{u.questionsCount || 0}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[9px] text-stone-400 mb-0.5">تصحيح</p>
+                    <p className="text-xs font-bold">{u.gradingsCount || 0}</p>
+                  </div>
                 </div>
               </div>
-
-              <div className="flex items-center justify-between gap-4">
+              
+              <div className="flex items-center justify-between gap-4 text-right" dir="rtl">
                 <div className="flex-1">
-                  <div className="flex justify-between text-[10px] mb-1">
-                    <span className="text-stone-400">الاستهلاك</span>
-                    <span className="font-bold">{Math.round((u.pagesUsed / u.pageLimit) * 100)}%</span>
-                  </div>
-                  <div className="h-1.5 bg-stone-100 rounded-full overflow-hidden">
-                    <div 
-                      className={cn("h-full", u.pagesUsed / u.pageLimit > 0.9 ? "bg-red-500" : "bg-emerald-500")}
-                      style={{ width: `${Math.min(100, (u.pagesUsed / u.pageLimit) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="w-28">
-                  <p className="text-[10px] text-stone-400 mb-1">الحد المسموح</p>
+                  <p className="text-[10px] text-stone-400 mb-1 font-bold">الحد المسموح</p>
                   <select 
                     value={u.pageLimit}
                     onChange={(e) => updateUserLimit(u.uid, Number(e.target.value))}
-                    className="w-full bg-stone-50 px-2 py-1.5 rounded-lg border border-stone-200 text-xs outline-none font-bold cursor-pointer"
+                    className="w-full bg-stone-50 px-3 py-2 rounded-xl border border-stone-200 text-xs outline-none font-bold cursor-pointer"
                   >
-                    <option value="100">100</option>
-                    <option value="500">500</option>
-                    <option value="1000">1000</option>
-                    <option value="1500">1500</option>
-                    <option value="2000">2000</option>
+                    <option value="100">100 صفحة</option>
+                    <option value="500">500 صفحة</option>
+                    <option value="1000">1000 صفحة</option>
+                    <option value="1500">1500 صفحة</option>
+                    <option value="2000">2000 صفحة</option>
                   </select>
                 </div>
               </div>
+              {u.isNew && (
+                <button 
+                  onClick={() => acknowledgeNewUser(u.uid)}
+                  className="w-full bg-blue-600 text-white px-5 py-2 rounded-xl text-xs font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 shadow-sm"
+                >
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  تمييز كمقروء
+                </button>
+              )}
             </div>
           ))}
         </div>
 
-        {activeUsers.length === 0 && (
+        {users.length === 0 && (
           <div className="bg-stone-50 p-12 rounded-3xl border border-dashed border-stone-200 text-center text-stone-400 text-sm">
-            لا يوجد مستخدمين نشطين حالياً
+            لا يوجد أعضاء مسجلين حالياً
           </div>
         )}
       </div>
