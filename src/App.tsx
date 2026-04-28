@@ -542,17 +542,11 @@ function App() {
             let data = userDoc.data() as UserProfile;
             const isAdminEmail = u.email?.toLowerCase()?.trim() === 'asmaomar5566@gmail.com';
             
-            // Auto-approve if status is pending or missing
-            if (data.status !== 'approved' && data.status !== 'rejected') {
-              console.log("Auth: Auto-approving existing pending user...");
-              await updateDoc(userDocRef, { status: 'approved' });
-              data.status = 'approved';
-            }
-
             if (isAdminEmail && data.role !== 'admin') {
               console.log("Auth: Updating admin role...");
-              await updateDoc(userDocRef, { role: 'admin' });
+              await updateDoc(userDocRef, { role: 'admin', status: 'approved' });
               data.role = 'admin';
+              data.status = 'approved';
             }
             console.log("Auth: User profile loaded:", data);
             setUserProfile(data);
@@ -563,7 +557,7 @@ function App() {
               uid: u.uid,
               email: u.email || '',
               displayName: u.displayName || '',
-              status: 'approved',
+              status: isAdminEmail ? 'approved' : 'pending',
               role: isAdminEmail ? 'admin' : 'user',
               pageLimit: 100,
               pagesUsed: 0,
