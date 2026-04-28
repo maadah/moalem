@@ -48,6 +48,7 @@ function ContactButtons({ className }: { className?: string }) {
           href="https://wa.me/9647706118992" 
           target="_blank" 
           rel="noreferrer"
+          translate="no"
           className="bg-[#25D366] text-white py-2.5 rounded-xl font-bold flex items-center justify-center gap-2 hover:opacity-90 transition-all shadow-sm group"
         >
           <MessageCircle className="w-4 h-4 group-hover:scale-110 transition-transform" />
@@ -538,20 +539,19 @@ function App() {
           const userDoc = await getDoc(userDocRef);
           
           if (userDoc.exists()) {
-            const data = userDoc.data() as UserProfile;
+            let data = userDoc.data() as UserProfile;
             const isAdminEmail = u.email?.toLowerCase()?.trim() === 'asmaomar5566@gmail.com';
             
-            if (isAdminEmail) {
-              console.log("Auth: Current user is identified as ADMIN by email.");
-            }
-            
-            if (isAdminEmail && (data.status !== 'approved' || data.role !== 'admin')) {
-              console.log("Auth: Updating admin profile status/role...");
-              await updateDoc(userDocRef, {
-                status: 'approved',
-                role: 'admin'
-              });
+            // Auto-approve if status is pending or missing
+            if (data.status !== 'approved' && data.status !== 'rejected') {
+              console.log("Auth: Auto-approving existing pending user...");
+              await updateDoc(userDocRef, { status: 'approved' });
               data.status = 'approved';
+            }
+
+            if (isAdminEmail && data.role !== 'admin') {
+              console.log("Auth: Updating admin role...");
+              await updateDoc(userDocRef, { role: 'admin' });
               data.role = 'admin';
             }
             console.log("Auth: User profile loaded:", data);
@@ -563,7 +563,7 @@ function App() {
               uid: u.uid,
               email: u.email || '',
               displayName: u.displayName || '',
-              status: isAdminEmail ? 'approved' : 'pending',
+              status: 'approved',
               role: isAdminEmail ? 'admin' : 'user',
               pageLimit: 100,
               pagesUsed: 0,
@@ -721,6 +721,7 @@ function App() {
                 href="https://wa.me/9647706118992" 
                 target="_blank" 
                 rel="noreferrer"
+                translate="no"
                 className="bg-emerald-500 text-white py-3 rounded-xl font-medium flex items-center justify-center gap-2 hover:bg-emerald-600 transition-colors"
               >
                 تواصل عبر واتساب
@@ -786,7 +787,7 @@ function App() {
                   <Phone className="w-3 h-3" />
                   اتصال
                 </a>
-                <a href="https://wa.me/9647706118992" target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-[10px] font-black text-stone-400 uppercase tracking-tighter hover:text-[#25D366] transition-colors">
+                <a href="https://wa.me/9647706118992" target="_blank" rel="noreferrer" translate="no" className="flex items-center gap-1.5 text-[10px] font-black text-stone-400 uppercase tracking-tighter hover:text-[#25D366] transition-colors">
                   <MessageCircle className="w-3 h-3" />
                   واتساب
                 </a>
@@ -909,7 +910,7 @@ function AdminDashboard() {
     const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       console.log("AdminDashboard: Received users snapshot, size:", snapshot.size);
-      const fetchedUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as UserProfile));
+      const fetchedUsers = snapshot.docs.map(doc => ({ ...doc.data(), uid: doc.id } as UserProfile));
       console.log("AdminDashboard: Users data:", fetchedUsers);
       setUsers(fetchedUsers);
       setLoading(false);
@@ -1301,6 +1302,7 @@ function NavButton({ active, onClick, icon, label, mobile = false }: { active: b
   return (
     <button 
       onClick={onClick}
+      translate="no"
       className={cn(
         "flex items-center transition-all",
         mobile 
@@ -1334,6 +1336,7 @@ function Dashboard({ exams, onNewExam, onGrade, onEditExam, onDeleteExam }: any)
         </div>
         <button 
           onClick={onNewExam}
+          translate="no"
           className="bg-emerald-600 text-white px-6 py-3 rounded-2xl font-medium flex items-center justify-center gap-2 hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-600/20 w-full md:w-auto"
         >
           <Plus className="w-5 h-5" />
@@ -1351,7 +1354,7 @@ function Dashboard({ exams, onNewExam, onGrade, onEditExam, onDeleteExam }: any)
             <Phone className="w-4 h-4 text-emerald-600" />
             <span dir="ltr">07706118992</span>
           </a>
-          <a href="https://wa.me/9647706118992" target="_blank" rel="noreferrer" className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-[#25D366] text-white px-6 py-3 rounded-xl font-bold hover:opacity-90 transition-all shadow-sm">
+          <a href="https://wa.me/9647706118992" target="_blank" rel="noreferrer" translate="no" className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-[#25D366] text-white px-6 py-3 rounded-xl font-bold hover:opacity-90 transition-all shadow-sm">
             <MessageCircle className="w-4 h-4" />
             واتساب الدعم
           </a>
