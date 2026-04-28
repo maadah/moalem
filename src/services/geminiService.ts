@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 
 export interface Question {
   id: string;
@@ -26,26 +26,22 @@ export interface GradingResult {
 const getApiKeys = () => {
   const keys: string[] = [];
   
+  // Prefer process.env as per skill guidelines
+  const envKey = process.env.GEMINI_API_KEY;
+  if (envKey && envKey !== 'undefined' && envKey !== 'null' && envKey !== '') {
+    keys.push(envKey);
+  }
+
+  // Fallbacks for specific environments
+  const viteKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (viteKey && !keys.includes(viteKey)) {
+    keys.push(viteKey);
+  }
+
   const urlParams = new URLSearchParams(window.location.search);
   const urlKey = urlParams.get('key');
-  if (urlKey) {
+  if (urlKey && !keys.includes(urlKey)) {
     keys.push(urlKey);
-  }
-
-  const primaryKey = import.meta.env.VITE_GEMINI_API_KEY || 
-                    (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '') ||
-                    (typeof process !== 'undefined' ? process.env.VITE_GEMINI_API_KEY : '');
-  
-  if (primaryKey && primaryKey !== 'undefined' && primaryKey !== 'null' && primaryKey !== '') {
-    keys.push(primaryKey);
-  }
-
-  const secondaryKey = import.meta.env.VITE_GEMINI_API_KEY_SECONDARY || 
-                      (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY_SECONDARY : '') ||
-                      (typeof process !== 'undefined' ? process.env.VITE_GEMINI_API_KEY_SECONDARY : '');
-
-  if (secondaryKey && secondaryKey !== 'undefined' && secondaryKey !== 'null' && secondaryKey !== '') {
-    keys.push(secondaryKey);
   }
 
   const localKey = localStorage.getItem('GEMINI_API_KEY_AUTO');
@@ -209,7 +205,7 @@ export async function extractExamFromDualImages(
   const response = await retryWithBackoff((currentKey) => {
     const ai = new GoogleGenAI({ apiKey: currentKey });
     return ai.models.generateContent({
-      model: "gemini-3.1-pro-preview", 
+      model: "gemini-3-flash-preview", 
       contents: [
         { text: "QUESTION IMAGES:" },
         ...qImageParts,
@@ -222,46 +218,46 @@ export async function extractExamFromDualImages(
         Arabic text must be preserved exactly. Ensure the 3-level hierarchy is strictly followed.`,
         responseMimeType: "application/json",
         responseSchema: {
-          type: "OBJECT",
+          type: Type.OBJECT,
           required: ["questions"],
           properties: {
-            title: { type: "STRING" },
-            requiredQuestionsCount: { type: "NUMBER" },
+            title: { type: Type.STRING },
+            requiredQuestionsCount: { type: Type.NUMBER },
             questions: {
-              type: "ARRAY",
+              type: Type.ARRAY,
               items: {
-                type: "OBJECT",
+                type: Type.OBJECT,
                 required: ["id", "text", "type", "subStyle"],
                 properties: {
-                  id: { type: "STRING" },
-                  text: { type: "STRING" },
-                  answer: { type: "STRING" },
-                  grade: { type: "NUMBER" },
-                  type: { type: "STRING" },
-                  subStyle: { type: "STRING", enum: ["numbers", "letters"] },
+                  id: { type: Type.STRING },
+                  text: { type: Type.STRING },
+                  answer: { type: Type.STRING },
+                  grade: { type: Type.NUMBER },
+                  type: { type: Type.STRING },
+                  subStyle: { type: Type.STRING, enum: ["numbers", "letters"] },
                   subQuestions: {
-                    type: "ARRAY",
+                    type: Type.ARRAY,
                     items: {
-                      type: "OBJECT",
+                      type: Type.OBJECT,
                       required: ["id", "text", "type", "subStyle"],
                       properties: {
-                        id: { type: "STRING" },
-                        text: { type: "STRING" },
-                        answer: { type: "STRING" },
-                        grade: { type: "NUMBER" },
-                        type: { type: "STRING" },
-                        subStyle: { type: "STRING", enum: ["numbers", "letters"] },
+                        id: { type: Type.STRING },
+                        text: { type: Type.STRING },
+                        answer: { type: Type.STRING },
+                        grade: { type: Type.NUMBER },
+                        type: { type: Type.STRING },
+                        subStyle: { type: Type.STRING, enum: ["numbers", "letters"] },
                         subQuestions: {
-                          type: "ARRAY",
+                          type: Type.ARRAY,
                           items: {
-                            type: "OBJECT",
+                            type: Type.OBJECT,
                             required: ["id", "text", "type"],
                             properties: {
-                              id: { type: "STRING" },
-                              text: { type: "STRING" },
-                              answer: { type: "STRING" },
-                              grade: { type: "NUMBER" },
-                              type: { type: "STRING" }
+                              id: { type: Type.STRING },
+                              text: { type: Type.STRING },
+                              answer: { type: Type.STRING },
+                              grade: { type: Type.NUMBER },
+                              type: { type: Type.STRING }
                             }
                           }
                         }
@@ -331,7 +327,7 @@ export async function extractExamFromImages(base64Images: string[], apiKey?: str
   const response = await retryWithBackoff((currentKey) => {
     const ai = new GoogleGenAI({ apiKey: currentKey });
     return ai.models.generateContent({
-      model: "gemini-3.1-pro-preview", // Upgraded to Pro for complex hierarchy reasoning
+      model: "gemini-3-flash-preview", 
       contents: [
         ...imageParts,
         { text: prompt }
@@ -350,14 +346,14 @@ export async function extractExamFromImages(base64Images: string[], apiKey?: str
         3. Point (1, 2, 3...): The specific math problems or multiple choice items.
            - 'text': The actual problem (e.g., "5 + 5"). Labels like "1-" MUST NOT be in the 'text'.
            - 'subQuestions': MUST be empty. Never nest deeper than this.
-  
+   
         CRITICAL CLEANING RULES:
         1. If a Question has branches (أ، ب), it MUST be Level 1.
         2. If a Branch has sub-items (1, 2, 3), it MUST have those items as Level 3 subQuestions.
         3. If a question is just "س1/أ/ 5+5", then Level 1 is "س1", and Level 2 is "5+5" (with empty subQuestions).
         4. STICKY HIERARCHY: Do not start a new Main Question (س2) when you see branch "ب/". Ensure all branches (أ، ب، ج) are siblings under the same parent Question.
         5. NO HALUCINATIONS: Do not invent numbering. If the paper says "أ", use Level 2. If it says "1", use Level 3.
-  
+   
         CRITICAL CONSTRAINTS:
         - NO NESTED POINTS: A point (Level 3) cannot have subQuestions. It is a leaf node.
         - STICKY BRANCHES: Every Branch (أ, ب, ج..) belongs to the LAST mentioned Question (س1, س2..).
@@ -373,46 +369,46 @@ export async function extractExamFromImages(base64Images: string[], apiKey?: str
         - VALIDATION: Ensure the hierarchy matches the paper. If "ب" is in the paper, it's a subQuestion of the same "س" as "أ".`,
         responseMimeType: "application/json",
         responseSchema: {
-          type: "OBJECT",
+          type: Type.OBJECT,
           required: ["questions"],
           properties: {
-            title: { type: "STRING" },
-            requiredQuestionsCount: { type: "NUMBER" },
+            title: { type: Type.STRING },
+            requiredQuestionsCount: { type: Type.NUMBER },
             questions: {
-              type: "ARRAY",
+              type: Type.ARRAY,
               items: {
-                type: "OBJECT",
+                type: Type.OBJECT,
                 required: ["id", "text", "type", "subStyle"],
                 properties: {
-                  id: { type: "STRING" },
-                  text: { type: "STRING" },
-                  answer: { type: "STRING" },
-                  grade: { type: "NUMBER" },
-                  type: { type: "STRING" },
-                  subStyle: { type: "STRING", enum: ["numbers", "letters"] },
+                  id: { type: Type.STRING },
+                  text: { type: Type.STRING },
+                  answer: { type: Type.STRING },
+                  grade: { type: Type.NUMBER },
+                  type: { type: Type.STRING },
+                  subStyle: { type: Type.STRING, enum: ["numbers", "letters"] },
                   subQuestions: {
-                    type: "ARRAY",
+                    type: Type.ARRAY,
                     items: {
-                      type: "OBJECT",
+                      type: Type.OBJECT,
                       required: ["id", "text", "type", "subStyle"],
                       properties: {
-                        id: { type: "STRING" },
-                        text: { type: "STRING" },
-                        answer: { type: "STRING" },
-                        grade: { type: "NUMBER" },
-                        type: { type: "STRING" },
-                        subStyle: { type: "STRING", enum: ["numbers", "letters"] },
+                        id: { type: Type.STRING },
+                        text: { type: Type.STRING },
+                        answer: { type: Type.STRING },
+                        grade: { type: Type.NUMBER },
+                        type: { type: Type.STRING },
+                        subStyle: { type: Type.STRING, enum: ["numbers", "letters"] },
                         subQuestions: { // Added Level 3
-                          type: "ARRAY",
+                          type: Type.ARRAY,
                           items: {
-                            type: "OBJECT",
+                            type: Type.OBJECT,
                             required: ["id", "text", "type"],
                             properties: {
-                              id: { type: "STRING" },
-                              text: { type: "STRING" },
-                              answer: { type: "STRING" },
-                              grade: { type: "NUMBER" },
-                              type: { type: "STRING" }
+                              id: { type: Type.STRING },
+                              text: { type: Type.STRING },
+                              answer: { type: Type.STRING },
+                              grade: { type: Type.NUMBER },
+                              type: { type: Type.STRING }
                             }
                           }
                         }
@@ -638,29 +634,29 @@ export async function gradeStudentPaper(
         systemInstruction: "You are a professional Arabic teacher. Grading must be consistent and fair. Use only provided IDs.",
         responseMimeType: "application/json",
         responseSchema: {
-          type: "OBJECT",
+          type: Type.OBJECT,
           properties: {
             results: {
-              type: "ARRAY",
+              type: Type.ARRAY,
               items: {
-                type: "OBJECT",
+                type: Type.OBJECT,
                 properties: {
-                  studentName: { type: "STRING" },
+                  studentName: { type: Type.STRING },
                   gradings: {
-                    type: "ARRAY",
+                    type: Type.ARRAY,
                     items: {
-                      type: "OBJECT",
+                      type: Type.OBJECT,
                       properties: {
-                        questionId: { type: "STRING" },
-                        studentAnswer: { type: "STRING" },
-                        grade: { type: "NUMBER" },
-                        feedback: { type: "STRING" },
-                        box: { type: "ARRAY", items: { type: "NUMBER" } },
-                        pageIndex: { type: "NUMBER" }
+                        questionId: { type: Type.STRING },
+                        studentAnswer: { type: Type.STRING },
+                        grade: { type: Type.NUMBER },
+                        feedback: { type: Type.STRING },
+                        box: { type: Type.ARRAY, items: { type: Type.NUMBER } },
+                        pageIndex: { type: Type.NUMBER }
                       }
                     }
                   },
-                  totalGrade: { type: "NUMBER" }
+                  totalGrade: { type: Type.NUMBER }
                 }
               }
             }

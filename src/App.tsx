@@ -634,6 +634,8 @@ function App() {
       
       if (error.code === 'auth/unauthorized-domain') {
         alert("خطأ: هذا النطاق غير مصرح به في إعدادات Firebase. يرجى التأكد من إضافة رابط المعاينة الحالي في Firebase Console > Authentication > Settings > Authorized domains.");
+      } else if (error.code === 'auth/network-request-failed') {
+        alert("خطأ في الاتصال: تعذر الوصول إلى خوادم التحقق. يرجى التأكد من جودة اتصال الإنترنت، أو حاول إيقاف أي مانع إعلانات (AdBlocker) قد يمنع خدمات Google، ثم حاول مرة أخرى.");
       } else if (isMissingInitialState) {
         alert("تنبيه: تعذر إكمال تسجيل الدخول بسبب قيود في المتصفح أو بيئة العرض (Iframe).\n\nالحل: يرجى الضغط على زر 'Open in new tab' أو 'فتح في نافذة جديدة' في أعلى الصفحة لتشغيل التطبيق بشكل مستقل، ثم حاول تسجيل الدخول مرة أخرى.");
       } else {
