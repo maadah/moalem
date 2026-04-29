@@ -27,12 +27,25 @@ export interface GradingResult {
 const getApiKey = () => {
   // Try various common environment variable patterns for Vite/Netlify
   const viteKey = import.meta.env?.VITE_GEMINI_API_KEY;
-  if (viteKey && viteKey !== 'undefined') return viteKey;
+  if (viteKey && viteKey !== 'undefined' && viteKey !== '') return viteKey;
 
-  const envKey = process.env?.GEMINI_API_KEY;
-  if (envKey && envKey !== 'undefined') return envKey;
+  // Fallback to process.env if available (usually during dev or if polyfilled)
+  try {
+    const envKey = process.env?.GEMINI_API_KEY || (process.env as any)?.VITE_GEMINI_API_KEY;
+    if (envKey && envKey !== 'undefined' && envKey !== '') return envKey;
+  } catch (e) {
+    // process might not be defined in browser
+  }
   
   return localStorage.getItem('GEMINI_API_KEY_FALLBACK') || '';
+};
+
+const getApiKeyErrorMessage = () => {
+  const isNetlify = window.location.hostname.includes('netlify.app');
+  if (isNetlify) {
+    return 'مفتاح API غير مضبوط. إذا كنت تستخدم Netlify، تأكد من إضافة المفتاح باسم VITE_GEMINI_API_KEY في إعدادات البيئة (Environment Variables). يمكنك أيضاً إدخاله يدوياً من أيقونة الإعدادات (⚙️) في الأعلى.';
+  }
+  return 'مفتاح API غير مضبوط. يرجى الضغط على أيقونة الترس (⚙️) في الأعلى وإدخال مفتاح Gemini API للمتابعة.';
 };
 
 const cleanJson = (text: string) => {
@@ -46,7 +59,7 @@ export async function extractExamFromDualImages(
 ): Promise<{ title: string, questions: Question[], requiredQuestionsCount?: number }> {
   try {
     const apiKey = getApiKey();
-    if (!apiKey) throw new Error('مفتاح API غير مضبوط. يرجى الضغط على أيقونة الترس (⚙️) في الأعلى وإدخال مفتاح Gemini API للمتابعة.');
+    if (!apiKey) throw new Error(getApiKeyErrorMessage());
     const ai = new GoogleGenAI({ apiKey });
 
     const qImagesData = await Promise.all(questionImages.map(async (base64) => {
@@ -103,7 +116,7 @@ export async function extractExamFromDualImages(
 export async function extractExamFromImages(base64Images: string[]): Promise<{ title: string, questions: Question[], requiredQuestionsCount?: number }> {
   try {
     const apiKey = getApiKey();
-    if (!apiKey) throw new Error('مفتاح API غير مضبوط. يرجى الضغط على أيقونة الترس (⚙️) في الأعلى وإدخال مفتاح Gemini API للمتابعة.');
+    if (!apiKey) throw new Error(getApiKeyErrorMessage());
     const ai = new GoogleGenAI({ apiKey });
 
     const imagesData = await Promise.all(base64Images.map(async (base64) => {
@@ -158,7 +171,7 @@ export async function gradeStudentPaper(
 ): Promise<{ results: { studentName: string; gradings: GradingResult[]; totalGrade: number }[] }> {
   try {
     const apiKey = getApiKey();
-    if (!apiKey) throw new Error('مفتاح API غير مضبوط. يرجى الضغط على أيقونة الترس (⚙️) في الأعلى وإدخال مفتاح Gemini API للمتابعة.');
+    if (!apiKey) throw new Error(getApiKeyErrorMessage());
     const ai = new GoogleGenAI({ apiKey });
 
     if (onProgress) onProgress(0, imageUrls.length, 'compressing');
