@@ -25,8 +25,13 @@ export interface GradingResult {
 
 // Initialize AI on client side as per instructions
 const getApiKey = () => {
-  const envKey = process.env.GEMINI_API_KEY;
+  // Try various common environment variable patterns for Vite/Netlify
+  const viteKey = import.meta.env?.VITE_GEMINI_API_KEY;
+  if (viteKey && viteKey !== 'undefined') return viteKey;
+
+  const envKey = process.env?.GEMINI_API_KEY;
   if (envKey && envKey !== 'undefined') return envKey;
+  
   return localStorage.getItem('GEMINI_API_KEY_FALLBACK') || '';
 };
 
@@ -41,7 +46,7 @@ export async function extractExamFromDualImages(
 ): Promise<{ title: string, questions: Question[], requiredQuestionsCount?: number }> {
   try {
     const apiKey = getApiKey();
-    if (!apiKey) throw new Error('يرجى ضبط مفتاح API للمتابعة');
+    if (!apiKey) throw new Error('مفتاح API غير مضبوط. يرجى الضغط على أيقونة الترس (⚙️) في الأعلى وإدخال مفتاح Gemini API للمتابعة.');
     const ai = new GoogleGenAI({ apiKey });
 
     const qImagesData = await Promise.all(questionImages.map(async (base64) => {
@@ -98,7 +103,7 @@ export async function extractExamFromDualImages(
 export async function extractExamFromImages(base64Images: string[]): Promise<{ title: string, questions: Question[], requiredQuestionsCount?: number }> {
   try {
     const apiKey = getApiKey();
-    if (!apiKey) throw new Error('يرجى ضبط مفتاح API للمتابعة');
+    if (!apiKey) throw new Error('مفتاح API غير مضبوط. يرجى الضغط على أيقونة الترس (⚙️) في الأعلى وإدخال مفتاح Gemini API للمتابعة.');
     const ai = new GoogleGenAI({ apiKey });
 
     const imagesData = await Promise.all(base64Images.map(async (base64) => {
@@ -153,7 +158,7 @@ export async function gradeStudentPaper(
 ): Promise<{ results: { studentName: string; gradings: GradingResult[]; totalGrade: number }[] }> {
   try {
     const apiKey = getApiKey();
-    if (!apiKey) throw new Error('يرجى ضبط مفتاح API للمتابعة');
+    if (!apiKey) throw new Error('مفتاح API غير مضبوط. يرجى الضغط على أيقونة الترس (⚙️) في الأعلى وإدخال مفتاح Gemini API للمتابعة.');
     const ai = new GoogleGenAI({ apiKey });
 
     if (onProgress) onProgress(0, imageUrls.length, 'compressing');
@@ -245,13 +250,21 @@ export async function gradeStudentPaper(
     const results = data.results || (data.gradings ? [{ studentName: data.studentName || 'طالب غير معروف', gradings: data.gradings, totalGrade: data.totalGrade }] : []);
 
     return { 
-      results: results.map((r: any) => ({
-        ...r,
-        gradings: (r.gradings || []).map((g: any) => ({
+      results: results.map((r: any) => {
+        const gradingsWithMax = (r.gradings || []).map((g: any) => ({
           ...g,
           maxGrade: g.maxGrade || flattenedQuestions.find(fq => fq.id === g.questionId)?.grade || 0
-        }))
-      }))
+        }));
+        
+        // Ensure total grade is calculated by summing individual question grades
+        const computedTotal = gradingsWithMax.reduce((acc: number, g: any) => acc + (Number(g.grade) || 0), 0);
+        
+        return {
+          ...r,
+          gradings: gradingsWithMax,
+          totalGrade: computedTotal
+        };
+      })
     };
   } catch (error: any) {
     console.error("Grading error:", error);
