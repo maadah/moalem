@@ -27,17 +27,17 @@ export interface GradingResult {
 const getApiKey = () => {
   // Try various common environment variable patterns for Vite/Netlify
   const viteKey = import.meta.env?.VITE_GEMINI_API_KEY;
-  if (viteKey && viteKey !== 'undefined' && viteKey !== '') return viteKey;
+  if (viteKey && viteKey !== 'undefined' && viteKey !== '') return viteKey.trim();
 
   // Fallback to process.env if available (usually during dev or if polyfilled)
   try {
     const envKey = process.env?.GEMINI_API_KEY || (process.env as any)?.VITE_GEMINI_API_KEY;
-    if (envKey && envKey !== 'undefined' && envKey !== '') return envKey;
+    if (envKey && envKey !== 'undefined' && envKey !== '') return envKey.trim();
   } catch (e) {
     // process might not be defined in browser
   }
   
-  return localStorage.getItem('GEMINI_API_KEY_FALLBACK') || '';
+  return (localStorage.getItem('GEMINI_API_KEY_FALLBACK') || '').trim();
 };
 
 const getApiKeyErrorMessage = () => {
@@ -237,8 +237,14 @@ export async function gradeStudentPaper(
     
     CRITICAL GRADING RULES:
     1. EXHAUSTIVE SEARCH: Grade every visible mark individually.
-    2. COORDINATES: Provide the 'box' [ymin, xmin, ymax, xmax] precisely.
-    3. JSON OUTPUT: {"results": [{"studentName": "...", "gradings": [{"questionId": "...", "studentAnswer": "...", "grade": number, "maxGrade": number, "feedback": "...", "box": [ymin, xmin, ymax, xmax], "pageIndex": number}]}]}.`;
+    2. PEDANTIC LITERAL OCR (ZERO INFERENCE): In the 'studentAnswer' field, you MUST act as a Literal OCR Robot. 
+       - Transcribe EXACTLY what is written, character by character. 
+       - If the student wrote "68-", you MUST write "68-", even if the math logic suggests it should be "28".
+       - DO NOT use math logic to "correct" the student's transcription.
+       - PRIORTIZE BOXED TEXT: If a student has drawn a box or circle around a number, that number is the student's definitive answer and MUST be transcribed exactly.
+       - Transcribe Arabic/Hindi numerals (٠-٩) and symbols (=, -, +, ×, ÷) with absolute fidelity to the ink on the paper.
+    3. COORDINATES: Provide the 'box' [ymin, xmin, ymax, xmax] precisely.
+    4. JSON OUTPUT: {"results": [{"studentName": "...", "gradings": [{"questionId": "...", "studentAnswer": "...", "grade": number, "maxGrade": number, "feedback": "...", "box": [ymin, xmin, ymax, xmax], "pageIndex": number}]}]}.`;
 
     const parts: any[] = base64ImagesData.map((data) => ({ inlineData: { data, mimeType: "image/jpeg" } }));
     parts.push({ text: prompt });
@@ -250,8 +256,8 @@ export async function gradeStudentPaper(
         responseMimeType: "application/json",
         temperature: 0,
         systemInstruction: isMath ? 
-          "You are a pedantic Math Examiner. You have a zero-tolerance policy for PEMDAS/BODMAS violations. You treat addition-before-multiplication as a critical failure. You verify every digit and every operation symbol. You provide feedback in Arabic, explaining exactly which mathematical law was violated." :
-          "You are a professional Iraqi teacher and rigorous examiner. You provide detailed, fair grading with partial credit. You ensure the student's work matches the provided model answer."
+          "أنت مصحح رياضيات دقيق جداً وروبوت استخراج نصوص حرفي. 1) مرحلة الاستخراج: يجب أن تكتب ما تراه في الورقة بدقة 100% حتى لو كان خطأً رياضياً. إذا رأيت '68-' اكتب '68-' ولا تكتب '28' بناءً على استنتاجك. يمنع منعاً باتاً تغيير أي رقم أو رمز يظهر في الورقة. 2) مرحلة التصحيح: اعتمد سياسة تصحيح مرنة (Lenient Grading). إذا كانت خطوات الحل صحيحة ومنطقية ولكن الناتج النهائي فقط خطأ، اخصم درجة واحدة فقط (مثلاً 9/10 أو 4/5). ركز على تقييم الفهم وليس فقط الناتج. يجب أن تكون الملاحظات (feedback) باللغة العربية الفصحى دائماً وبأسلوب تربوي عراقي." :
+          "أنت معلم محترف وروبوت استخراج نصوص حرفي. يجب استخراج إجابة الطالب بدقة كما هي مكتوبة تماماً. اعتمد سياسة تصحيح مرنة؛ إذا كانت الإجابة قريبة من الصواب أو تعبر عن فهم الموضوع، اخصم درجة بسيطة فقط. يجب أن تكون الملاحظات والتعليقات (feedback) باللغة العربية الفصحى دائماً."
       }
     });
 
