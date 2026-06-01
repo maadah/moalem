@@ -202,48 +202,57 @@ export async function gradeStudentPaper(
 
     if (onProgress) onProgress(0, 100, 'grading');
     
-    const isMath = subject.includes('رياضيات') || subject.toLowerCase().includes('math');
-
     const prompt = `Perform a RIGOROUS COMPARATIVE AUDIT of the student's paper against the MODEL ANSWER.
     
-    Current Subject: ${subject}.
     Questions to grade (TOTAL ${flattenedQuestions.length}): ${JSON.stringify(flattenedQuestions)}. 
     Total Exam Max Grade: ${totalExamGrade}. 
     Required Questions Count: ${requiredQuestionsCount || 'All'}. 
     
-    MENTAL PROCEDURE FOR GRADING (DO THIS INTERNALLY FOR EVERY QUESTION):
-    1. Identify Question: Find the student's handwritten answer for a question in the images.
-    2. Read Model Answer: Carefully read the 'answer' provided in the JSON for this question. 
-    3. MANDATORY MATH CHECK: 
-       - If the question is math, YOU MUST RE-CALCULATE the model answer and the student's answer using basic arithmetic rules.
-       - IMPORTANT: 85 ÷ 5 = 17. NOT 18. Verification: 17 * 5 = 85. 
-       - If you read "18" but the math says "17", use "17". Do not hallucinate numbers.
-    4. COMPARE: Match student result with model answer result.
+    STEP 0 — DETECT THE TYPE OF EACH QUESTION (do this per question, do NOT assume a single subject):
+      • TYPE NUMERIC: the answer is a number or a math expression with a final value (arithmetic,
+        equations, fractions, percentages, physics/chemistry calculations). → grade by the FINAL RESULT.
+      • TYPE TEXTUAL: the answer is a definition, explanation, law, reason, list, translation, grammar,
+        or essay (common in biology, chemistry theory, islamic studies, arabic/english, "define/explain"
+        questions). → grade by MEANING vs the model answer (keywords/concepts), accept paraphrases.
+
+    MENTAL PROCEDURE (FOR EVERY QUESTION):
+    1. Find the student's handwritten answer in the images.
+    2. Read the model 'answer' from the JSON.
+    3. Apply the correct grading mode for the detected type (see below).
+    4. Compare and grade.
+
+    ===== GRADING TYPE: NUMERIC =====
+    A) READ-THE-RESULT-FIRST METHOD (think in WORDS to avoid auto-completing):
+       For each step "LEFT = RIGHT": first read the RIGHT side the student wrote, then ask honestly in
+       Arabic "does RIGHT come from LEFT?". Example "٥ × ٧ = ٣٠" → "هل ثلاثون ناتج خمسة ضرب سبعة؟" → لا (٣٥) → wrong.
+    B) A RESULT HAS TWO PARTS: the NUMBER and the SIGN — BOTH must be correct. A correct sign with a
+       wrong number is WRONG (e.g. ٣×(-٥)=-٢٠ is wrong, correct is -١٥). Never approve a step just
+       because the sign looks right.
+    C) ORDER OF OPERATIONS: × and ÷ before + and − (e.g. ٣+٤×٢ = ١١, not ١٤).
+    D) SOLVING EQUATIONS: a term moving across "=" FLIPS its sign. A line can be arithmetically true yet
+       wrong if the transfer was wrong (س+١٤=٢٧ → س=٢٧-١٤=١٣; if student wrote س=٢٧+١٤=٤١ that is WRONG).
+    E) FRACTIONS: read each fraction exactly as written (top/bottom). Do NOT flip it and do NOT turn a
+       multiplication into a reciprocal unless the student actually wrote ÷.
+    F) FINAL DECISION: locate the student's FINAL result (the value at the end of the last line, after the
+       last "="); read it digit by digit and say it in words to be sure (٢١ = واحد وعشرون, not ١٢). Compare
+       its VALUE to the model answer's final value (accept equivalent forms ١/٢=٠٫٥=٥٠٪; ignore units م²، سم³;
+       ignore any leading question number like "٣)"). Same value → correct; different → wrong.
+
+    ===== GRADING TYPE: TEXTUAL =====
+    1. FACTUAL ACCURACY: compare the student's meaning with the MODEL ANSWER.
+    2. KEYWORDS/CONCEPTS: check the essential points are present (wording may differ; accept paraphrases & synonyms).
+    3. PARTIAL CREDIT: full marks if the core meaning matches; partial if some required points are present;
+       zero only if blank, irrelevant, or fundamentally wrong.
     
-    ${isMath ? `STRICT MATHEMATICAL LAWS:
-    1. ARITHMETIC INTEGRITY: You MUST be 100% accurate in basic division/multiplication. 
-       - If the model answer is 17 and the student writes 18, it is WRONG.
-       - If the model answer is 17 and the student writes 17, it is RIGHT.
-       - NEVER swap 17 and 18.
-    2. PEMDAS/BODMAS IS SUPREME: Multiplications (×) and Divisions (÷) MUST be performed BEFORE Additions (+) and Subtractions (-).
-       - TEST CASE: 7 × 3 + 2 = 23. If student wrote 35, grade is 0.
-       - TEST CASE: 21 - 4 * 2 = 13. If student wrote 34, grade is 0.
-    3. STEP-BY-STEP CALCULATION: Verify each line of the student's work.
-    4. ZERO LENIENCY for Logic Errors: Priority of operations errors = 0 score.` : 
-    `GRADING STANDARDS:
-    1. FACTUAL ACCURACY: Compare student answers precisely with the MODEL ANSWER.
-    2. KEYWORDS: Check for essential concepts.
-    3. LOGICAL STEPS: The process must align with the model answer's logic.`}
-    
-    CRITICAL GRADING RULES:
-    1. EXHAUSTIVE SEARCH: Grade every visible mark individually.
-    2. PEDANTIC LITERAL OCR (ZERO INFERENCE): In the 'studentAnswer' field, you MUST act as a Literal OCR Robot. 
-       - Transcribe EXACTLY what is written, character by character. 
-       - If the student wrote "68-", you MUST write "68-", even if the math logic suggests it should be "28".
-       - DO NOT use math logic to "correct" the student's transcription.
-       - PRIORTIZE BOXED TEXT: If a student has drawn a box or circle around a number, that number is the student's definitive answer and MUST be transcribed exactly.
-       - Transcribe Arabic/Hindi numerals (٠-٩) and symbols (=, -, +, ×, ÷) with absolute fidelity to the ink on the paper.
-    3. COORDINATES: Provide the 'box' [ymin, xmin, ymax, xmax] precisely.
+    CRITICAL GRADING RULES (ALL TYPES):
+    1. EXHAUSTIVE SEARCH: grade every visible answer individually.
+    2. PEDANTIC LITERAL OCR (ZERO INFERENCE): in 'studentAnswer' act as a literal OCR robot. Transcribe
+       EXACTLY what is written, character by character, keeping the student's own Arabic/Western digits.
+       If the student wrote "68-", write "68-", even if the math suggests "28". DO NOT use logic to
+       "correct" the transcription. NEVER copy the model answer into studentAnswer. If a question is blank
+       (no ink), set studentAnswer "" and grade 0 — never invent or solve it.
+       PRIORITIZE BOXED TEXT: a number the student boxed/circled is their definitive answer.
+    3. COORDINATES: provide 'box' [ymin, xmin, ymax, xmax] precisely.
     4. JSON OUTPUT: {"results": [{"studentName": "...", "gradings": [{"questionId": "...", "studentAnswer": "...", "grade": number, "maxGrade": number, "feedback": "...", "box": [ymin, xmin, ymax, xmax], "pageIndex": number}]}]}.`;
 
     const parts: any[] = base64ImagesData.map((data) => ({ inlineData: { data, mimeType: "image/jpeg" } }));
@@ -255,9 +264,8 @@ export async function gradeStudentPaper(
       config: { 
         responseMimeType: "application/json",
         temperature: 0,
-        systemInstruction: isMath ? 
-          "أنت مصحح رياضيات دقيق جداً وروبوت استخراج نصوص حرفي. 1) مرحلة الاستخراج: يجب أن تكتب ما تراه في الورقة بدقة 100% حتى لو كان خطأً رياضياً. إذا رأيت '68-' اكتب '68-' ولا تكتب '28' بناءً على استنتاجك. يمنع منعاً باتاً تغيير أي رقم أو رمز يظهر في الورقة. 2) مرحلة التصحيح: اعتمد سياسة تصحيح مرنة (Lenient Grading). إذا كانت خطوات الحل صحيحة ومنطقية ولكن الناتج النهائي فقط خطأ، اخصم درجة واحدة فقط (مثلاً 9/10 أو 4/5). ركز على تقييم الفهم وليس فقط الناتج. يجب أن تكون الملاحظات (feedback) باللغة العربية الفصحى دائماً وبأسلوب تربوي عراقي." :
-          "أنت معلم محترف وروبوت استخراج نصوص حرفي. يجب استخراج إجابة الطالب بدقة كما هي مكتوبة تماماً. اعتمد سياسة تصحيح مرنة؛ إذا كانت الإجابة قريبة من الصواب أو تعبر عن فهم الموضوع، اخصم درجة بسيطة فقط. يجب أن تكون الملاحظات والتعليقات (feedback) باللغة العربية الفصحى دائماً."
+        systemInstruction:
+          "أنت معلم عراقي خبير وروبوت استخراج نصوص حرفي، تصحّح كل المواد. أولاً حدّد نوع كل سؤال: رقمي (رياضيات/مسائل حسابية) أو نصي (تعريف/شرح/قانون/قواعد). 1) الاستخراج: اكتب ما تراه في خط الطالب بدقة 100% حتى لو كان خطأً، واحتفظ بنظام أرقامه (عربي يبقى عربي). إذا رأيت '68-' اكتب '68-' ولا تصححها، ولا تنسخ الإجابة النموذجية أبداً، والسؤال الفارغ تكتبه فارغاً ودرجته صفر. 2) التصحيح: للأسئلة الرقمية احكم بالناتج النهائي مقارنةً بالنموذج (الرقم والإشارة معاً، مع ترتيب العمليات وقاعدة نقل الحدود وقراءة الكسور كما كُتبت دون قلب). للأسئلة النصية قارن المعنى والمفاهيم بالنموذج واقبل إعادة الصياغة وامنح درجة جزئية إن غطّى بعض النقاط. اجعل الملاحظات (feedback) بالعربية الفصحى وبأسلوب تربوي."
       }
     });
 
